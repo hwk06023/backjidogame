@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root{
     --night:#0f1b2d; --deep:#16263f; --sea:#1f3a5c;
@@ -44,6 +45,11 @@
   .row{display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap}
   .err{color:var(--red);font-size:14px;min-height:1.4em}
   .seg button.on{background:var(--yellow);color:var(--ink);border-color:var(--yellow)}
+  #qrBox{display:flex;flex-direction:column;align-items:center;gap:8px}
+  #qr{background:#fff;padding:10px;border-radius:14px;line-height:0;min-height:10px}
+  #qr img,#qr canvas{display:block;width:min(210px,52vw);height:auto}
+  .url{font-size:12px;word-break:break-all;color:var(--sky)}
+  .ok{color:var(--green);font-size:14px;min-height:1.4em}
 
   /* ---- game ---- */
   #game{display:none;position:fixed;inset:0;flex-direction:column;background:linear-gradient(180deg,var(--deep),var(--night))}
@@ -145,6 +151,7 @@
     <input id="joinName" placeholder="내 이름" maxlength="10" style="letter-spacing:0">
     <div class="err" id="joinErr"></div>
     <button id="btnConnect">입장하기</button>
+    <p class="sub">연결이 안 되면 몇 초 뒤 다시 눌러 보세요. 학교 와이파이가 막는 경우 휴대폰 데이터로 접속하면 대부분 해결돼요.</p>
     <button class="ghost back">뒤로</button>
   </div>
 </section>
@@ -154,13 +161,16 @@
     <h2 class="disp" style="font-size:28px;color:var(--green)">입장 완료!</h2>
     <p class="sub">선생님이 시작 버튼을 누르면 바로 시작돼요.<br>화면을 끄지 마세요.</p>
     <div id="waitList" class="sub" style="font-size:16px;color:var(--paper)"></div>
+    <div class="err" id="waitErr"></div>
     <div class="disp" style="font-size:40px;animation:wob 1s infinite">⏳</div>
   </div>
 </section>
 
 <section id="teacher" class="screen" style="justify-content:flex-start">
   <div class="card">
-    <p class="lab">참가 코드</p>
+    <p class="lab">QR을 찍으면 바로 입장</p>
+    <div id="qrBox"><div id="qr"></div><div class="url" id="joinUrl"></div></div>
+    <p class="lab">또는 참가 코드 입력</p>
     <div class="code disp" id="roomCode">····</div>
     <div class="err" id="teacherErr"></div>
     <div class="row">
@@ -236,13 +246,19 @@ const NATION = [
   {id:'gj',codes:['36','24'],name:'광주·전남',short:'광주·전남',type:'do'},
   {id:'gb',codes:['37']},{id:'gn',codes:['38']},{id:'jj',codes:['39']},
 ];
-const SCOPES = [{v:'nation',t:'전국 — 광역시·도 16'}].concat(
-  Object.keys(SIDO).filter(c=>c!=='29').sort().map(c=>({v:c,t:SIDO[c][0]+' 백지도'})));
-const scopeName = s => s==='nation' ? '전국 광역시·도' : SIDO[s][0];
+const METRO=['11','21','22','23','24','25','26','29'];      // 특별시·광역시·특별자치시 8
+const DO=['31','32','33','34','35','36','37','38','39'];      // 도·특별자치도 9
+const SCOPES = [
+  {v:'nation',t:'전국 — 광역시·도 16'},
+  {v:'metro', t:'특별시·광역시 8 모음'},
+  {v:'do',    t:'도·특별자치도 9 모음'},
+].concat(DO.map(c=>({v:c,t:SIDO[c][0]+' 백지도'})));
+const scopeName = s => s==='nation'?'전국 광역시·도' : s==='metro'?'특별시·광역시' : s==='do'?'도·특별자치도' : SIDO[s][0];
 
 function toFeature(o,props){ return {type:'Feature',properties:props,geometry:{type:o.t==='MP'?'MultiPolygon':'Polygon',coordinates:o.c}}; }
 const muniOf = code => DATA.muni.filter(m=>m.p[0]===code);
-function unitCount(scope){ return scope==='nation' ? NATION.length : muniOf(scope).length; }
+const sidoOf = code => DATA.sido.find(f=>f.p[0]===code);
+function unitCount(scope){ return scope==='nation'?NATION.length : scope==='metro'?METRO.length : scope==='do'?DO.length : muniOf(scope).length; }
 function tagOf(name){ return name.endsWith('군')?'gun':name.endsWith('구')?'gu':name.endsWith('시')?'si':'do'; }
 function tagText(t,name){ return t==='gun'?'군':t==='gu'?'구':t==='si'?(name.includes('특별')?'특별시':name.includes('광역')?'광역시':'시'):'도'; }
 
@@ -251,13 +267,23 @@ function buildUnits(scope){
   if(scope==='nation'){
     return NATION.map(n=>{
       const s=SIDO[n.codes[0]];
-      const parts=n.codes.map(c=>DATA.sido.find(f=>f.p[0]===c));
+      const parts=n.codes.map(sidoOf);
       return {id:n.id,name:n.name||s[0],short:n.short||s[1],type:n.type||s[2],
         features:parts.map(p=>toFeature(p,{})),label:parts[0].l};
     });
   }
+  if(scope==='metro'||scope==='do'){
+    return (scope==='metro'?METRO:DO).map(c=>{ const s=SIDO[c],f=sidoOf(c);
+      return {id:c,name:s[0],short:s[1],type:s[2],features:[toFeature(f,{})],label:f.l}; });
+  }
   return muniOf(scope).map(m=>({id:scope+m.p[1],name:m.p[1],short:m.p[1],type:tagOf(m.p[1]),
     features:[toFeature(m,{})],label:m.l}));
+}
+// 목표가 아닌 지역(배경 백지도)
+function buildContext(scope){
+  if(scope==='metro') return DO.map(sidoOf);
+  if(scope==='do') return METRO.map(sidoOf);
+  return [];
 }
 
 /* ================= 유틸 ================= */
@@ -301,9 +327,14 @@ const map=L.map('map',{zoomControl:false,dragging:false,scrollWheelZoom:false,do
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:14,opacity:.45}).addTo(map);
 L.control.attribution({prefix:false,position:'bottomleft'}).addAttribution('© OpenStreetMap © CARTO').addTo(map);
 let drawn=L.layerGroup().addTo(map), UNITS=[], allBounds=null;
+STYLE.off={fillColor:'#3a4a63',fillOpacity:1,color:'#16263f',weight:1.3};
 
 function drawScope(scope){
   drawn.clearLayers(); UNITS=buildUnits(scope); allBounds=null;
+  buildContext(scope).forEach(f=>{
+    const l=L.geoJSON(toFeature(f,{}),{style:STYLE.off,interactive:false}).getLayers()[0];
+    drawn.addLayer(l); allBounds = allBounds?allBounds.extend(l.getBounds()):L.latLngBounds(l.getBounds());
+  });
   UNITS.forEach(u=>{
     u.done=false; u.busy=false; u.layers=[];
     u.features.forEach(f=>{
@@ -440,17 +471,36 @@ const Game = {
 /* ================= 네트워크 ================= */
 const Net = {
   peer:null, conn:null, players:new Map(), lbTimer:null, code:'', tTimer:null, tLeft:0, rule:'score', finishCount:0,
+  joinTimer:null, myName:'', myCode:'', tries:0,
+  ICE:{iceServers:[
+    {urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:global.stun.twilio.com:3478']},
+    {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
+    {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
+    {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}]},
   ready(){ return typeof Peer!=='undefined'; },
+  cleanup(){ clearTimeout(this.joinTimer); if(this.peer){ try{this.peer.destroy();}catch(e){} this.peer=null; } this.conn=null; },
   join(code,name){
-    if(!this.ready()) return $('#joinErr').textContent='통신 모듈을 불러오지 못했어요. 인터넷 연결을 확인하세요.';
-    $('#joinErr').textContent='연결 중…';
-    this.peer=new Peer();
-    this.peer.on('error',e=>{ $('#joinErr').textContent = e.type==='peer-unavailable'?'그 코드의 방을 찾을 수 없어요.':'연결 오류: '+e.type; });
+    if(!this.ready()) return $('#joinErr').textContent='통신 모듈을 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침 하세요.';
+    this.cleanup(); this.myCode=code; this.myName=name; this.tries++;
+    $('#joinErr').style.color='var(--sky)'; $('#joinErr').textContent='연결 중… 잠시만 기다리세요';
+    const fail=msg=>{ this.cleanup(); $('#joinErr').style.color='var(--red)'; $('#joinErr').textContent=msg;
+      if($('#wait').classList.contains('on')){ show('#join'); } };
+    this.joinTimer=setTimeout(()=>fail('연결이 오래 걸려요. 다시 입장하기를 눌러 보세요. (와이파이 대신 데이터 사용 권장)'),15000);
+    this.peer=new Peer({config:this.ICE});
+    this.peer.on('error',e=>{
+      if(e.type==='peer-unavailable') fail('그 코드의 방이 없어요. 코드를 다시 확인하세요.');
+      else if(e.type==='network'||e.type==='server-error'||e.type==='socket-error') fail('네트워크가 막혀 있어요. 휴대폰 데이터로 다시 시도해 보세요.');
+      else fail('연결 오류: '+e.type+' — 다시 시도해 주세요.');
+    });
     this.peer.on('open',()=>{
-      this.conn=this.peer.connect('kgeo-'+code,{reliable:true});
-      this.conn.on('open',()=>{ this.send({t:'join',name}); show('#wait'); });
-      this.conn.on('data',d=>this.onStudent(d));
-      this.conn.on('close',()=>{ if(!Game.over&&$('#game').classList.contains('on')) Game.end('force'); });
+      this.conn=this.peer.connect('kgeo-'+code,{reliable:true,metadata:{name}});
+      this.conn.on('open',()=>{ clearTimeout(this.joinTimer); $('#joinErr').textContent=''; $('#waitErr').textContent='';
+        this.send({t:'join',name}); show('#wait'); });
+      this.conn.on('error',()=>fail('연결이 끊겼어요. 다시 입장하기를 눌러 주세요.'));
+      this.conn.on('close',()=>{
+        if(!Game.over&&$('#game').classList.contains('on')) Game.end('force');
+        else if($('#wait').classList.contains('on')){ $('#waitErr').textContent='연결이 끊겼어요. 다시 연결 중…'; setTimeout(()=>this.join(this.myCode,this.myName),1500); }
+      });
     });
   },
   send(d){ if(this.conn&&this.conn.open) this.conn.send(d); },
@@ -466,9 +516,12 @@ const Net = {
     if(!this.ready()) return $('#teacherErr').textContent='통신 모듈을 불러오지 못했어요. 인터넷 연결을 확인하세요.';
     this.players.clear(); this.code=randCode(); $('#roomCode').textContent='연결 중'; $('#teacherErr').textContent='';
     $('#podium').style.display='none'; $('#tBody').innerHTML=''; $('#btnStart').disabled=true; $('#btnEnd').disabled=true;
-    this.peer=new Peer('kgeo-'+this.code);
-    this.peer.on('open',()=>{ $('#roomCode').textContent=this.code; });
-    this.peer.on('error',e=>{ if(e.type==='unavailable-id') this.host(); else $('#teacherErr').textContent='연결 오류: '+e.type; });
+    if(this.peer){ try{this.peer.destroy();}catch(e){} }
+    this.peer=new Peer('kgeo-'+this.code,{config:this.ICE});
+    this.peer.on('open',()=>{ $('#roomCode').textContent=this.code; this.showQR(); });
+    this.peer.on('disconnected',()=>{ try{this.peer.reconnect();}catch(e){} });
+    this.peer.on('error',e=>{ if(e.type==='unavailable-id') this.host();
+      else $('#teacherErr').textContent='연결 오류: '+e.type+' — 새로고침 후 다시 열어 주세요.'; });
     this.peer.on('connection',c=>{
       c.on('data',d=>{
         if(d.t==='join'){ this.players.set(c.peer,{conn:c,name:d.name,score:0,lives:3,combo:0,last:'',ok:null,done:false,correct:0,elapsed:0,finished:false,rank:0}); this.broadcastPlayers(); this.renderTable(); }
@@ -481,6 +534,12 @@ const Net = {
       });
       c.on('close',()=>{ const p=this.players.get(c.peer); if(p){p.done=true;p.last='퇴장';} this.renderTable(); this.broadcastPlayers(); });
     });
+  },
+  joinURL(){ return location.origin+location.pathname+'?room='+this.code; },
+  showQR(){
+    const url=this.joinURL(); $('#joinUrl').textContent=url; const box=$('#qr'); box.innerHTML='';
+    if(typeof QRCode!=='undefined'){ new QRCode(box,{text:url,width:420,height:420,correctLevel:QRCode.CorrectLevel.M}); }
+    else box.innerHTML='<div style="color:#233048;padding:8px;font-size:12px">QR 라이브러리를 불러오지 못했어요.<br>위 주소를 직접 알려 주세요.</div>';
   },
   bcast(d){ this.players.forEach(p=>{ if(p.conn.open) p.conn.send(d); }); },
   broadcastPlayers(){ this.bcast({t:'players',list:[...this.players.values()].map(p=>p.name)}); $('#tCount').textContent='참가자 '+this.players.size+'명'; $('#btnStart').disabled=this.players.size===0; },
@@ -547,6 +606,10 @@ $('#btnConnect').onclick=()=>{ const c=$('#joinCode').value.trim().toUpperCase()
   if(!n) return $('#joinErr').textContent='이름을 입력하세요.';
   Snd.init(); Net.join(c,n); };
 $('#btnTeacher').onclick=()=>{ show('#teacher'); Net.host(); };
+$('#joinCode').addEventListener('input',e=>{ e.target.value=e.target.value.toUpperCase(); });
+$('#joinName').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#btnConnect').click(); });
+const roomParam=(new URLSearchParams(location.search).get('room')||'').toUpperCase().slice(0,4);
+if(roomParam){ $('#joinCode').value=roomParam; show('#join'); setTimeout(()=>$('#joinName').focus(),200); }
 $('#btnStart').onclick=()=>Net.startBattle();
 $('#btnEnd').onclick=()=>Net.endBattle();
 document.querySelectorAll('.back').forEach(b=>b.onclick=()=>{ Snd.stop(); if(Net.peer){Net.peer.destroy();Net.peer=null;} show('#menu'); });
