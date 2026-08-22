@@ -2984,132 +2984,156 @@ var qrcode = function() {
 </script>
 <style>
   :root{
-    --night:#0f1b2d; --deep:#16263f; --sea:#1f3a5c;
-    --land:#ead9ae; --land-hover:#ffc94d; --land-done:#a8b3a0;
-    --ink:#233048; --paper:#fffaf0;
-    --yellow:#ffd60a; --green:#3ddc84; --red:#ff4d5a; --sky:#7cc4ff;
+    /* 밝은 운동회 팔레트 */
+    --paper:#FFFDF6; --sky1:#DCEEFF; --sky2:#FFF1D6;
+    --ink:#16233B; --ink2:#5B6A83;
+    --sun:#FFC22E; --coral:#FF5A5F; --mint:#12C296; --blue:#2F80ED; --grape:#7A5CFF;
+    --land:#FFE2A6; --land-hover:#FFB020; --land-done:#BFD6CE; --land-off:#E3E7EC;
+    --line:#16233B;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%;background:var(--night);color:var(--paper);
+  html,body{height:100%;color:var(--ink);background:var(--paper);
     font-family:'Noto Sans KR',system-ui,sans-serif;overflow:hidden;
     -webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none}
   .disp{font-family:'Jua','Noto Sans KR',sans-serif;font-weight:400}
-  button{font-family:inherit;cursor:pointer;border:0;border-radius:14px;padding:14px 22px;font-size:18px;
-    background:var(--yellow);color:var(--ink);font-weight:700;transition:transform .1s,filter .1s}
-  button:active{transform:scale(.96)}
-  button.ghost{background:transparent;color:var(--paper);border:2px solid rgba(255,255,255,.35)}
-  button.small{padding:8px 14px;font-size:14px;border-radius:10px}
-  button:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
-  input{font-family:inherit;font-size:20px;padding:12px 14px;border-radius:12px;border:2px solid rgba(255,255,255,.25);
-    background:rgba(255,255,255,.08);color:var(--paper);width:100%;text-align:center;letter-spacing:.1em}
-  input:focus{outline:none;border-color:var(--yellow)}
-  select{font-family:inherit;font-size:16px;padding:10px 12px;border-radius:12px;background:#1f3a5c;color:var(--paper);
-    border:1px solid rgba(255,255,255,.25);max-width:100%}
 
-  .screen{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px;overflow:auto;
-    background:radial-gradient(circle at 50% 0%,var(--sea) 0%,var(--night) 70%)}
+  button{font-family:'Jua','Noto Sans KR',sans-serif;cursor:pointer;border:2px solid var(--line);border-radius:16px;
+    padding:14px 22px;font-size:19px;background:var(--sun);color:var(--ink);
+    box-shadow:0 4px 0 var(--line);transition:transform .08s,box-shadow .08s}
+  button:active{transform:translateY(4px);box-shadow:0 0 0 var(--line)}
+  button.ghost{background:#fff}
+  button.blue{background:var(--blue);color:#fff}
+  button.small{padding:8px 14px;font-size:15px;border-radius:12px;box-shadow:0 3px 0 var(--line)}
+  button:focus-visible{outline:3px solid var(--grape);outline-offset:3px}
+  input,select{font-family:inherit;font-size:17px;padding:12px 14px;border-radius:14px;border:2px solid var(--line);
+    background:#fff;color:var(--ink);width:100%;max-width:100%}
+  input{text-align:center;letter-spacing:.12em;font-size:22px;font-weight:700}
+  input:focus,select:focus{outline:none;box-shadow:0 0 0 3px rgba(47,128,237,.3)}
+
+  .screen{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;padding:18px;overflow:auto;
+    background:
+      repeating-linear-gradient(115deg,rgba(255,255,255,.55) 0 26px,rgba(255,255,255,0) 26px 52px),
+      linear-gradient(160deg,var(--sky1),var(--sky2))}
   .screen.on{display:flex}
-  .card{width:min(430px,100%);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
-    border-radius:22px;padding:24px 20px;display:flex;flex-direction:column;gap:11px;text-align:center;backdrop-filter:blur(6px);margin:auto}
-  h1.title{font-size:clamp(36px,9vw,60px);line-height:1;color:var(--yellow);letter-spacing:-.02em;text-shadow:0 6px 0 rgba(0,0,0,.35)}
-  h1.title small{display:block;font-size:.36em;color:var(--sky);letter-spacing:.2em;margin-top:8px}
-  .sub{color:rgba(255,255,255,.7);font-size:14px;line-height:1.5}
-  .lab{font-size:11px;letter-spacing:.2em;color:rgba(255,255,255,.5)}
+  .card{width:min(440px,100%);background:#fff;border:3px solid var(--line);border-radius:26px;
+    padding:22px 20px;display:flex;flex-direction:column;gap:11px;text-align:center;margin:auto;
+    box-shadow:0 8px 0 var(--line)}
+  h1.title{font-size:clamp(38px,10vw,62px);line-height:.95;color:var(--ink);letter-spacing:-.02em}
+  h1.title em{font-style:normal;color:var(--coral)}
+  h1.title small{display:block;font-size:.3em;color:#fff;background:var(--blue);border-radius:999px;
+    padding:5px 12px;margin:10px auto 0;width:fit-content;letter-spacing:.18em}
+  h2.head{font-family:'Jua',sans-serif;font-size:30px;color:var(--ink)}
+  .sub{color:var(--ink2);font-size:14px;line-height:1.55}
+  .lab{font-size:11px;letter-spacing:.2em;color:var(--ink2);font-weight:700}
   .row{display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap}
-  .err{color:var(--red);font-size:14px;min-height:1.4em}
-  .seg button.on{background:var(--yellow);color:var(--ink);border-color:var(--yellow)}
-  #qrBox{display:flex;flex-direction:column;align-items:center;gap:8px}
-  #qr{background:#fff;padding:10px;border-radius:14px;line-height:0;min-height:10px}
-  #qr img,#qr canvas{display:block;width:min(210px,52vw);height:auto}
-  .url{font-size:12px;word-break:break-all;color:var(--sky)}
-  .ok{color:var(--green);font-size:14px;min-height:1.4em}
+  .err{color:var(--coral);font-size:14px;min-height:1.4em;font-weight:700}
+  .field{display:flex;flex-direction:column;gap:6px;text-align:left}
 
-  /* ---- game ---- */
-  #game{display:none;position:fixed;inset:0;flex-direction:column;background:linear-gradient(180deg,var(--deep),var(--night))}
+  /* 난이도 상/중/하 */
+  .seg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .seg button{padding:10px 4px;font-size:17px;background:#fff;line-height:1.15}
+  .seg button small{display:block;font-family:'Noto Sans KR';font-size:10px;color:var(--ink2);font-weight:700}
+  .seg button.on{background:var(--sun)}
+  .seg button.on small{color:var(--ink)}
+
+  /* QR */
+  #qrBox{display:flex;flex-direction:column;align-items:center;gap:8px}
+  #qr{background:#fff;padding:8px;border-radius:14px;border:3px solid var(--line);line-height:0;min-height:10px}
+  #qr svg{display:block;width:min(200px,50vw);height:auto}
+  .url{font-size:12px;word-break:break-all;color:var(--blue);font-weight:700;text-decoration:underline}
+
+  /* ---- 게임 ---- */
+  #game{display:none;position:fixed;inset:0;flex-direction:column;background:var(--paper)}
   #game.on{display:flex}
-  #hud{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;
-    background:rgba(0,0,0,.35);border-bottom:1px solid rgba(255,255,255,.1);flex-wrap:wrap}
-  .stat{display:flex;flex-direction:column;line-height:1}
-  .stat b{font-size:22px;color:var(--yellow)}
-  .stat span{font-size:11px;color:rgba(255,255,255,.6);letter-spacing:.12em}
-  #lives{font-size:22px;letter-spacing:2px}
-  #lives .x{opacity:.2;filter:grayscale(1)}
-  #stage b{color:var(--sky)}
-  #timer b{color:var(--red)}
-  #play{position:relative;flex:1;overflow:hidden}
-  #map{position:absolute;inset:0;background:var(--deep)}
-  .leaflet-container{background:var(--deep);font-family:inherit}
-  .leaflet-interactive{cursor:pointer;transition:fill .15s}
+  #hud{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;
+    background:linear-gradient(90deg,var(--sun),#FFDD7A);border-bottom:3px solid var(--line);flex-wrap:wrap}
+  .stat{display:flex;flex-direction:column;line-height:1.05}
+  .stat b{font-size:23px;font-family:'Jua',sans-serif;font-variant-numeric:tabular-nums}
+  .stat span{font-size:10px;color:#7a6320;letter-spacing:.14em;font-weight:700}
+  #lives{font-size:21px;letter-spacing:1px}
+  #lives .x{opacity:.25;filter:grayscale(1)}
+  #timer b{color:var(--coral)}
+  #play{position:relative;flex:1;overflow:hidden;background:#EAF4FF}
+  #map{position:absolute;inset:0;background:#DCEEFF}
+  .leaflet-container{background:#DCEEFF;font-family:inherit}
+  .leaflet-interactive{cursor:pointer;transition:fill .12s}
   .lbl{background:transparent;border:0;box-shadow:none;pointer-events:none;padding:0;overflow:visible}
   .lbl span{position:absolute;left:0;top:0;transform:translate(-50%,-50%);font-family:'Noto Sans KR',sans-serif;
     font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;
-    text-shadow:0 0 3px #fffaf0,0 0 3px #fffaf0,0 0 3px #fffaf0}
+    text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff,0 0 3px #fff}
   .lbl.hide{display:none}
-  .lbl.done span{color:#556}
+  .lbl.done span{color:#5d7a70}
   #play>.word,#play>.pop,#play>.particle,#play>#combo,#play>#lb,#play>#banner,#play>#floor,#play>#scopeTag{z-index:1000}
-  #scopeTag{position:absolute;left:8px;top:8px;font-size:12px;background:rgba(0,0,0,.45);padding:5px 10px;border-radius:999px;pointer-events:none}
-  .word{position:absolute;left:0;top:0;padding:8px 16px;border-radius:999px;background:var(--yellow);color:var(--ink);
-    font-family:'Jua',sans-serif;font-size:clamp(19px,4.4vw,27px);white-space:nowrap;pointer-events:none;
-    box-shadow:0 8px 0 rgba(0,0,0,.3),0 0 24px rgba(255,214,10,.45);will-change:transform}
-  .word.fall{animation:wob 1.2s ease-in-out infinite}
-  .word .tag{display:inline-block;font-size:.5em;padding:2px 7px;border-radius:999px;margin-right:6px;vertical-align:middle;
+  #scopeTag{position:absolute;left:8px;top:8px;font-size:12px;font-weight:700;background:#fff;border:2px solid var(--line);
+    padding:4px 10px;border-radius:999px;pointer-events:none}
+  .word{position:absolute;left:0;top:0;padding:9px 18px;border-radius:999px;background:var(--sun);color:var(--ink);
+    border:3px solid var(--line);font-family:'Jua',sans-serif;font-size:clamp(20px,4.6vw,29px);white-space:nowrap;
+    pointer-events:none;box-shadow:0 5px 0 var(--line);will-change:transform}
+  .word.fall{animation:wob 1.1s ease-in-out infinite}
+  .word .tag{display:inline-block;font-size:.46em;padding:2px 8px;border-radius:999px;margin-right:7px;vertical-align:middle;
     color:#fff;font-family:'Noto Sans KR',sans-serif;font-weight:700}
-  .tag.do{background:#2a9d5c} .tag.si{background:#2f6fde} .tag.gun{background:#8a6d2f} .tag.gu{background:#8d3fa8}
-  .word.si{background:#bfe0ff;box-shadow:0 8px 0 rgba(0,0,0,.3),0 0 24px rgba(124,196,255,.5)}
-  .word.gun{background:#ffe2a8} .word.gu{background:#eccaff}
+  .tag.do{background:var(--mint)} .tag.si{background:var(--blue)} .tag.gun{background:#C4802B} .tag.gu{background:var(--grape)}
+  .word.si{background:#BFE0FF} .word.gun{background:#FFE9B8} .word.gu{background:#E5D7FF}
   @keyframes wob{0%,100%{rotate:-3deg}50%{rotate:3deg}}
-  #floor{position:absolute;left:0;right:0;bottom:0;height:6px;background:repeating-linear-gradient(90deg,var(--red) 0 14px,transparent 14px 24px);opacity:.7}
+  #floor{position:absolute;left:0;right:0;bottom:0;height:10px;
+    background:repeating-linear-gradient(45deg,var(--coral) 0 10px,#fff 10px 20px);border-top:3px solid var(--line)}
   .shake{animation:shake .35s}
   @keyframes shake{0%,100%{transform:translate(0)}20%{transform:translate(-8px,2px)}40%{transform:translate(8px,-2px)}60%{transform:translate(-6px,0)}80%{transform:translate(6px,0)}}
-  .pop{position:absolute;pointer-events:none;font-family:'Jua',sans-serif;font-size:32px;color:var(--green);
-    text-shadow:0 3px 0 rgba(0,0,0,.5);animation:pop 1s ease-out forwards;transform:translate(-50%,-50%)}
-  .pop.bad{color:var(--red)}
+  .pop{position:absolute;pointer-events:none;font-family:'Jua',sans-serif;font-size:34px;color:var(--mint);
+    -webkit-text-stroke:2px var(--line);animation:pop 1s ease-out forwards;transform:translate(-50%,-50%)}
+  .pop.bad{color:var(--coral)}
   @keyframes pop{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}25%{opacity:1;transform:translate(-50%,-70%) scale(1.3)}100%{opacity:0;transform:translate(-50%,-160%) scale(1)}}
-  #combo{position:absolute;top:10px;left:50%;transform:translateX(-50%);font-family:'Jua',sans-serif;font-size:30px;
-    color:#fff;opacity:0;pointer-events:none;text-shadow:0 0 20px var(--yellow),0 4px 0 rgba(0,0,0,.5)}
+  #combo{position:absolute;top:12px;left:50%;transform:translateX(-50%);font-family:'Jua',sans-serif;font-size:32px;
+    color:var(--coral);-webkit-text-stroke:2px var(--line);opacity:0;pointer-events:none}
   #combo.show{animation:combo .9s ease-out}
   @keyframes combo{0%{opacity:0;transform:translateX(-50%) scale(.4)}30%{opacity:1;transform:translateX(-50%) scale(1.25)}100%{opacity:0;transform:translateX(-50%) scale(1)}}
-  .particle{position:absolute;width:10px;height:10px;border-radius:3px;pointer-events:none;animation:fly .8s ease-out forwards}
+  .particle{position:absolute;width:11px;height:11px;border-radius:3px;pointer-events:none;animation:fly .8s ease-out forwards}
   @keyframes fly{to{transform:translate(var(--dx),var(--dy)) rotate(540deg);opacity:0}}
   #banner{position:absolute;inset:0;display:none;align-items:center;justify-content:center;pointer-events:none}
   #banner.on{display:flex}
-  #banner div{font-family:'Jua',sans-serif;font-size:clamp(34px,9vw,66px);color:var(--yellow);text-shadow:0 8px 0 rgba(0,0,0,.5);
+  #banner div{font-family:'Jua',sans-serif;font-size:clamp(34px,9vw,64px);color:#fff;-webkit-text-stroke:3px var(--line);
     animation:bannerIn 1.6s ease-out forwards;text-align:center;line-height:1.1}
-  #banner div small{display:block;font-size:.4em;color:var(--sky)}
-  @keyframes bannerIn{0%{opacity:0;transform:scale(.4)}15%{opacity:1;transform:scale(1.1)}30%{transform:scale(1)}80%{opacity:1}100%{opacity:0}}
-  #lb{position:absolute;right:8px;top:8px;background:rgba(0,0,0,.5);border-radius:12px;padding:8px 10px;font-size:12px;min-width:120px;display:none;pointer-events:none}
+  #banner div small{display:block;font-size:.36em;color:var(--sun);-webkit-text-stroke:2px var(--line)}
+  @keyframes bannerIn{0%{opacity:0;transform:scale(.4) rotate(-6deg)}15%{opacity:1;transform:scale(1.12) rotate(2deg)}30%{transform:scale(1) rotate(0)}80%{opacity:1}100%{opacity:0}}
+  #lb{position:absolute;right:8px;top:8px;background:#fff;border:2px solid var(--line);border-radius:14px;
+    padding:8px 10px;font-size:12px;min-width:128px;display:none;pointer-events:none;box-shadow:0 3px 0 var(--line)}
   #lb.on{display:block}
-  #lb div{display:flex;justify-content:space-between;gap:8px}
-  #lb div.me{color:var(--yellow);font-weight:700}
+  #lb div{display:flex;justify-content:space-between;gap:8px;font-weight:700}
+  #lb div.me{color:var(--coral)}
 
-  .score-big{font-size:64px;color:var(--yellow);line-height:1}
-  #teacher .card{width:min(760px,100%)}
-  .code{font-size:clamp(44px,13vw,88px);letter-spacing:.18em;color:var(--yellow);line-height:1;text-shadow:0 8px 0 rgba(0,0,0,.4)}
+  .score-big{font-size:66px;font-family:'Jua',sans-serif;color:var(--coral);line-height:1;-webkit-text-stroke:2px var(--line)}
+  #teacher .card{width:min(820px,100%)}
+  .code{font-size:clamp(44px,13vw,84px);letter-spacing:.16em;line-height:1;color:var(--ink);
+    background:var(--sun);border:3px solid var(--line);border-radius:18px;padding:6px 4px}
   table{width:100%;border-collapse:collapse;font-size:15px}
-  th,td{padding:8px 6px;text-align:left;border-bottom:1px solid rgba(255,255,255,.1)}
-  th{font-size:11px;color:rgba(255,255,255,.5);letter-spacing:.15em}
+  th,td{padding:8px 6px;text-align:left;border-bottom:2px solid #E7EBF1}
+  th{font-size:11px;color:var(--ink2);letter-spacing:.14em}
   td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  tbody tr:first-child{background:#FFF6DA}
   tr.top td:first-child::before{content:"🥇 "} tr.second td:first-child::before{content:"🥈 "} tr.third td:first-child::before{content:"🥉 "}
-  .bar{height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden}
-  .bar i{display:block;height:100%;background:var(--green);transition:width .4s}
-  .mini{width:96px;height:96px;display:block;background:rgba(255,255,255,.06);border-radius:8px}
-  .mini path{fill:#4a5a75;stroke:#0f1b2d;stroke-width:.8}
-  .mini path.won{fill:var(--green)} .mini path.miss{fill:var(--red)} .mini path.gone{fill:#7d8798}
+  .bar{height:7px;background:#E7EBF1;border-radius:4px;overflow:hidden;margin-top:4px}
+  .bar i{display:block;height:100%;background:var(--mint);transition:width .4s}
+  .mini{width:96px;height:96px;display:block;background:#EAF4FF;border:2px solid var(--line);border-radius:10px}
+  .mini path{fill:#fff;stroke:#98A6BC;stroke-width:.7}
+  .mini path.won{fill:var(--mint)} .mini path.miss{fill:var(--coral)} .mini path.gone{fill:#CBD5E1}
   td.mapcell{width:104px}
-  #qNow{display:none;flex-direction:column;gap:4px;align-items:center;background:rgba(255,214,10,.12);
-    border:1px solid rgba(255,214,10,.4);border-radius:16px;padding:12px}
+  #qNow{display:none;flex-direction:column;gap:4px;align-items:center;background:var(--sun);
+    border:3px solid var(--line);border-radius:20px;padding:12px;box-shadow:0 5px 0 var(--line)}
   #qNow.on{display:flex}
-  #qName{font-family:'Jua',sans-serif;font-size:clamp(28px,7vw,46px);color:var(--yellow);line-height:1}
-  #qWin{font-size:15px;min-height:1.4em;color:var(--green);font-weight:700}
-  #feed{max-height:120px;overflow:auto;font-size:13px;text-align:left;display:flex;flex-direction:column-reverse;gap:2px}
-  #feed div{opacity:.85}
+  #qName{font-family:'Jua',sans-serif;font-size:clamp(30px,7vw,50px);line-height:1}
+  #qWin{font-size:15px;min-height:1.4em;font-weight:700}
+  #feed{max-height:130px;overflow:auto;font-size:13px;text-align:left;display:flex;flex-direction:column-reverse;gap:3px;
+    background:#F4F7FB;border-radius:14px;padding:8px}
   .podium{display:flex;align-items:flex-end;justify-content:center;gap:10px;height:170px;margin:10px 0}
-  .podium div{flex:1;max-width:120px;background:linear-gradient(180deg,var(--yellow),#d9a400);border-radius:10px 10px 0 0;color:var(--ink);
-    display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:8px 4px;font-weight:700;animation:rise 1s ease-out}
-  .podium div:nth-child(1){height:70%;background:linear-gradient(180deg,#dfe3ea,#9aa3b0)} .podium div:nth-child(2){height:100%} .podium div:nth-child(3){height:50%;background:linear-gradient(180deg,#e0b08a,#a86f40)}
+  .podium div{flex:1;max-width:120px;border:3px solid var(--line);border-radius:12px 12px 0 0;color:var(--ink);
+    display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:8px 4px;font-weight:700;
+    font-family:'Jua',sans-serif;animation:rise 1s ease-out}
+  .podium div:nth-child(1){height:70%;background:#DFE5EE} .podium div:nth-child(2){height:100%;background:var(--sun)}
+  .podium div:nth-child(3){height:50%;background:#F0C089}
   @keyframes rise{from{height:0}}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.01s!important}}
-  @media (max-width:480px){#hud{padding:6px 8px}.stat b{font-size:18px}#lives{font-size:18px}button{padding:12px 16px;font-size:16px}}
+  @media (max-width:480px){#hud{padding:6px 8px}.stat b{font-size:19px}#lives{font-size:18px}button{padding:12px 16px;font-size:17px}
+    .mini{width:64px;height:64px} td.mapcell{width:70px} th,td{padding:6px 4px;font-size:13px}}
 </style>
 </head>
 <body>
@@ -3126,24 +3150,29 @@ var qrcode = function() {
 
 <section id="menu" class="screen on">
   <div class="card">
-    <h1 class="title disp">지명 낙하<small>한국 행정구역</small></h1>
-    <p class="sub">지명이 하늘에서 떨어져요. 바닥에 닿기 전에<br>지도에서 그 지역을 눌러 잡으세요!</p>
-    <p class="lab">백지도 범위</p>
-    <select id="soloScope"></select>
-    <p class="sub" id="soloScopeInfo"></p>
-    <p class="lab">지도 이름표</p>
-    <select id="soloLabels">
-      <option value="auto" selected>단계별 자동 (100→60→30→0%)</option>
-      <option value="1">모두 보이기</option>
-      <option value="0.6">60%만</option>
-      <option value="0.3">30%만</option>
-      <option value="0">모두 숨기기</option>
-    </select>
+    <h1 class="title disp">지명 <em>낙하</em><small>한국 행정구역 배틀</small></h1>
+    <p class="sub">지명이 하늘에서 떨어져요.<br>바닥에 닿기 전에 지도에서 그 지역을 누르세요!</p>
     <button id="btnSolo">혼자 연습하기</button>
     <button id="btnJoin" class="ghost">참가 코드로 대결하기</button>
-    <button id="btnTeacher" class="ghost">교사 모드 (대결 중계)</button>
-    <p class="sub">단계가 오를수록 지도의 이름표가 사라지고 속도가 빨라져요.</p>
-    <p class="lab" id="diag">버전 v5 · 확인 중</p>
+    <button id="btnTeacher" class="ghost">교사 모드 · 대결 중계</button>
+    <p class="lab" id="diag">v6</p>
+  </div>
+</section>
+
+<section id="setup" class="screen">
+  <div class="card">
+    <h2 class="head">혼자 연습하기</h2>
+    <div class="field"><span class="lab">백지도 범위</span>
+      <select id="soloScope"></select>
+      <span class="sub" id="soloScopeInfo"></span></div>
+    <div class="field"><span class="lab">난이도 (지도 이름표)</span>
+      <div class="seg" id="soloSeg">
+        <button data-v="hard">상<small>백지도</small></button>
+        <button data-v="mid" class="on">중<small>절반 표기</small></button>
+        <button data-v="easy">하<small>모두 표기</small></button>
+      </div></div>
+    <button id="btnStartSolo">시작하기</button>
+    <button class="ghost back">뒤로</button>
   </div>
 </section>
 
@@ -3172,7 +3201,9 @@ var qrcode = function() {
 <section id="teacher" class="screen" style="justify-content:flex-start">
   <div class="card">
     <p class="lab">QR을 찍으면 바로 입장</p>
-    <div id="qrBox"><div id="qr"></div><div class="url" id="joinUrl"></div></div>
+    <div id="qrBox"><div id="qr"></div>
+      <a class="url" id="joinUrl" href="#" target="_blank" rel="noopener"></a>
+      <button class="small ghost" id="btnCopy">참가 링크 복사</button></div>
     <p class="lab">또는 참가 코드 입력</p>
     <div class="code disp" id="roomCode">····</div>
     <div class="err" id="teacherErr"></div>
@@ -3185,23 +3216,21 @@ var qrcode = function() {
           <option value="survival">서바이벌</option>
           <option value="race">완주 레이스</option>
         </select></label>
-      <label class="sub">지도 이름표
-        <select id="tLabels">
-          <option value="auto">단계별 자동 (100→60→30→0%)</option>
-          <option value="1">모두 보이기 (쉬움)</option>
-          <option value="0.6">60%만</option>
-          <option value="0.3">30%만</option>
-          <option value="0" selected>모두 숨기기 (어려움)</option>
-        </select></label>
       <label class="sub" id="durWrap">제한 시간
         <select id="duration"><option value="60">60초</option><option value="90">90초</option><option value="120" selected>120초</option><option value="180">180초</option></select></label>
     </div>
     <p class="sub" id="ruleDesc"></p>
+    <div class="field"><span class="lab">난이도 (지도 이름표)</span>
+      <div class="seg" id="tSeg">
+        <button data-v="hard" class="on">상<small>백지도</small></button>
+        <button data-v="mid">중<small>절반 표기</small></button>
+        <button data-v="easy">하<small>모두 표기</small></button>
+      </div></div>
     <div class="row">
       <button id="btnStart" disabled>대결 시작</button>
       <button id="btnEnd" class="ghost" disabled>종료</button>
     </div>
-    <div class="row sub"><span id="tCount">참가자 0명</span> · <span id="tTimer"></span> · <span class="lab">v4</span></div>
+    <div class="row sub"><span id="tCount">참가자 0명</span> · <span id="tTimer"></span> · <span class="lab">v6</span></div>
     <div id="qNow"><span class="lab">지금 문제</span><div id="qName">—</div><div id="qWin"></div></div>
     <div id="feed"></div>
     <div id="podium" class="podium" style="display:none"></div>
@@ -3213,7 +3242,6 @@ var qrcode = function() {
 <section id="game">
   <div id="hud">
     <div class="stat"><b id="score">0</b><span>SCORE</span></div>
-    <div class="stat" id="stage"><b id="stageN">1단계</b><span>STAGE</span></div>
     <div class="stat" id="timer" style="display:none"><b id="timeLeft">120</b><span>TIME</span></div>
     <div class="stat"><b id="left">0</b><span>남은 지역</span></div>
     <div id="lives">❤️❤️❤️</div>
@@ -3366,16 +3394,16 @@ const Snd = {
 $('#btnMute').onclick=()=>{ Snd.muted=!Snd.muted; $('#btnMute').textContent=Snd.muted?'🔇':'🔊'; };
 
 /* ================= 지도 ================= */
-const STYLE={base:{fillColor:'#ead9ae',fillOpacity:1,color:'#16263f',weight:1.3},
-  hover:{fillColor:'#ffc94d'},done:{fillColor:'#a8b3a0'},ok:{fillColor:'#3ddc84'},ng:{fillColor:'#ff4d5a'}};
-STYLE.off={fillColor:'#3a4a63',fillOpacity:1,color:'#16263f',weight:1.3};
+const STYLE={base:{fillColor:'#FFE2A6',fillOpacity:1,color:'#16233B',weight:1.4},
+  hover:{fillColor:'#FFB020'},done:{fillColor:'#BFD6CE'},ok:{fillColor:'#12C296'},ng:{fillColor:'#FF5A5F'}};
+STYLE.off={fillColor:'#E3E7EC',fillOpacity:1,color:'#98A6BC',weight:1};
 let map=null, drawn=null, UNITS=[], allBounds=null;
 function initMap(){
   if(map) return map;
   map=L.map('map',{zoomControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,touchZoom:false,
     boxZoom:false,keyboard:false,attributionControl:false,tap:false,zoomSnap:.1});
   try{
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:14,opacity:.45}).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:14,opacity:.5}).addTo(map);
     L.control.attribution({prefix:false,position:'bottomleft'}).addAttribution('© OpenStreetMap © CARTO').addTo(map);
   }catch(e){}   // 배경 타일이 막혀도 게임은 진행
   drawn=L.layerGroup().addTo(map);
@@ -3417,18 +3445,15 @@ const Game = {
   pool:[], cur:null, raf:null, t0:0, dur:0, over:false, rng:Math.random,
   timeLimit:0, timeLeft:0, timerInt:null, startAt:0,
   buzz:false, locked:false, qi:-1,
-  fallTime(){ return Math.max(3.5, 8 - (this.round-1)*1.2) * 1000; },
-  labelRatio(){
-    if(this.labels!=null && this.labels!=='auto') return +this.labels;
-    if(this.buzz) return 1;
-    return [1,.6,.3,0][Math.min(this.round-1,3)]; },
+  fallTime(){ return Math.max(3.8, 8 - this.correct*0.18) * 1000; },   // 맞힐수록 조금씩 빨라짐
+  labelRatio(){ return {hard:0, mid:.5, easy:1}[this.labels] ?? .5; },
   applyLabels(){
     const n=Math.round(UNITS.length*this.labelRatio()); const shown=UNITS.slice(); this.shuffle(shown);
     const vis=new Set(shown.slice(0,n).map(u=>u.id));
     UNITS.forEach(u=>u.txt.classList.toggle('hide',!vis.has(u.id)));
   },
   start(mode,opt={}){
-    const {seed=null,timeLimit=0,scope='nation',rule='score',labels='auto'}=opt;
+    const {seed=null,timeLimit=0,scope='nation',rule='score',labels='mid'}=opt;
     this.labels=labels;
     this.mode=mode; this.scope=scope; this.rule=rule; this.startAt=performance.now();
     this.buzz = (rule==='buzz'); this.locked=false; this.qi=-1;
@@ -3439,7 +3464,6 @@ const Game = {
     $('#timeLeft').textContent = this.timeLimit;
     $('#lb').classList.toggle('on', mode==='battle');
     $('#lives').style.display=this.buzz?'none':'';
-    $('#stage').style.display=this.buzz?'none':'';
     $('#scopeTag').textContent = scopeName(scope)+' 백지도';
     show('#game'); drawScope(scope); setTimeout(()=>{ if(map){map.invalidateSize();fitScope();} },60);
     if(this.buzz){ this.pool=[]; UNITS.forEach(u=>{u.done=false;u.setStyle(STYLE.base);u.txt.classList.remove('done');});
@@ -3452,9 +3476,8 @@ const Game = {
     if(this.timeLimit) this.timerInt=setInterval(()=>{ this.timeLeft--; $('#timeLeft').textContent=this.timeLeft; if(this.timeLeft<=0) this.end('time'); },1000);
   },
   newRound(first){
-    if(!first){ this.round++; Snd.sfxClear(); Snd.tempo=132+this.round*10;
-      this.banner(this.round+'단계!', (this.labels==='auto'||this.labels==null?'이름표 '+Math.round(this.labelRatio()*100)+'% · ':'')+'더 빨라져요'); }
-    else this.banner(scopeName(this.scope),UNITS.length+'개 지역 · 이름표 모두 보임');
+    const DIFF={hard:'상 · 백지도',mid:'중 · 절반 표기',easy:'하 · 모두 표기'}[this.labels]||'';
+    this.banner(scopeName(this.scope),UNITS.length+'개 지역 · 난이도 '+DIFF);
     this.pool=UNITS.slice(); this.shuffle(this.pool);
     UNITS.forEach(u=>{ u.done=false; u.setStyle(STYLE.base); u.txt.classList.remove('done'); });
     this.applyLabels();
@@ -3463,7 +3486,7 @@ const Game = {
   shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(this.rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];} },
   spawn(){
     if(this.over||this.buzz) return;
-    if(this.pool.length===0){ if(this.rule==='race'&&this.mode==='battle'){ this.end('race'); return; } this.newRound(false); return; }
+    if(this.pool.length===0){ this.end(this.rule==='race'&&this.mode==='battle'?'race':'clear'); return; }
     const u=this.pool[0], el=document.createElement('div');
     el.className='word fall '+u.type;
     el.innerHTML=`<span class="tag ${u.type}">${tagText(u.type,u.name)}</span>${u.name}`;
@@ -3554,11 +3577,11 @@ const Game = {
     if(this.lives<=0){ this.end('lives'); return; }
     setTimeout(()=>this.spawn(),700);
   },
-  hud(){ $('#score').textContent=this.score; $('#stageN').textContent=this.round+'단계';
-    $('#left').textContent=this.pool.length;
+  hud(){ $('#score').textContent=this.score;
+    $('#left').textContent=this.buzz?'—':this.pool.length;
     $('#lives').innerHTML=[0,1,2].map(i=>`<span class="${i<this.lives?'':'x'}">❤️</span>`).join(''); },
   pop(t,x,y,bad){ const d=document.createElement('div'); d.className='pop'+(bad?' bad':''); d.textContent=t; d.style.left=x+'px'; d.style.top=y+'px'; $('#play').appendChild(d); setTimeout(()=>d.remove(),1000); },
-  burst(x,y){ const cs=['#ffd60a','#3ddc84','#7cc4ff','#ff7ab6','#fff'];
+  burst(x,y){ const cs=['#FFC22E','#12C296','#2F80ED','#FF5A5F','#7A5CFF'];
     for(let i=0;i<18;i++){ const p=document.createElement('i'); p.className='particle';
       const a=Math.random()*Math.PI*2,d=60+Math.random()*90;
       p.style.cssText=`left:${x}px;top:${y}px;background:${cs[i%5]};--dx:${Math.cos(a)*d}px;--dy:${Math.sin(a)*d-40}px`;
@@ -3571,10 +3594,12 @@ const Game = {
     if(this.over) return; this.over=true; cancelAnimationFrame(this.raf); clearInterval(this.timerInt); Snd.stop();
     if(this.cur){ this.cur.el.remove(); this.cur=null; }
     document.querySelectorAll('.word').forEach(e=>e.remove());
-    $('#resTitle').textContent = reason==='lives'?'게임 오버':reason==='time'?'시간 종료!':reason==='race'?'완주! '+this.elapsed()+'초':'대결 종료';
-    $('#resTitle').style.color = reason==='lives'?'var(--red)':'var(--green)';
+    $('#resTitle').textContent = reason==='lives'?'게임 오버':reason==='time'?'시간 종료!':
+      reason==='race'?'완주! '+this.elapsed()+'초':reason==='clear'?'전부 다 찾았다! '+this.elapsed()+'초':'대결 종료';
+    $('#resTitle').style.color = reason==='lives'?'var(--coral)':'var(--mint)';
+    if(reason==='clear'||reason==='race') Snd.sfxClear();
     $('#resScore').textContent=this.score;
-    $('#resDetail').textContent=`${scopeName(this.scope)} · ${this.round}단계 도달 · 정답 ${this.correct}개`;
+    $('#resDetail').textContent=`${scopeName(this.scope)} · 정답 ${this.correct}개 · ${this.elapsed()}초`;
     $('#resRank').innerHTML=''; $('#btnAgain').style.display=this.mode==='battle'?'none':'';
     if(this.mode==='battle'){ Net.send({t:'done',score:this.score,correct:this.correct,elapsed:this.elapsed(),finished:reason==='race'});
       $('#resRank').innerHTML='<p class="sub">선생님 화면에서 순위를 확인하세요.</p>'; }
@@ -3777,7 +3802,9 @@ const Net = {
     if(location.protocol==='file:') return '(로컬 파일 실행 중 — 학생은 참가 코드 '+this.code+' 를 직접 입력하세요)';
     return location.origin+location.pathname+'?room='+this.code; },
   showQR(){
-    const url=this.joinURL(); $('#joinUrl').textContent=url; const box=$('#qr');
+    const url=this.joinURL(); const a=$('#joinUrl'); a.textContent=url;
+    if(location.protocol!=='file:') a.href=url; else a.removeAttribute('href');
+    const box=$('#qr');
     try{
       if(typeof qrcode==='undefined') throw new Error('QR 모듈 없음');
       const q=qrcode(0,'M'); q.addData(url); q.make();
@@ -3805,7 +3832,7 @@ const Net = {
   queueLb(){ if(this.lbTimer) return; this.lbTimer=setTimeout(()=>{ this.lbTimer=null; this.bcast({t:'lb',list:this.ranked()}); },900); },
   startBattle(){
     const duration=+$('#duration').value, rule=$('#rule').value, scope=$('#tScope').value,
-          labels=$('#tLabels').value, seed=Math.floor(Math.random()*1e9);
+          labels=tLabels, seed=Math.floor(Math.random()*1e9);
     this.rule=rule; this.finishCount=0;
     this.players.forEach(p=>Object.assign(p,{score:0,lives:3,combo:0,last:'',ok:null,done:false,correct:0,elapsed:0,finished:false,rank:0,won:new Set(),miss:null,streak:0}));
     this.session={active:true,msg:{seed,duration,rule,scope,labels}};
@@ -3859,9 +3886,14 @@ $('#soloScope').innerHTML=opts; $('#tScope').innerHTML=opts;
 const scopeInfo=()=>{ const v=$('#soloScope').value; $('#soloScopeInfo').textContent=`${scopeName(v)} · ${unitCount(v)}개 지역`; };
 $('#soloScope').onchange=scopeInfo; scopeInfo();
 (function(){ const ok=n=>n?'✓':'✗';
-  $('#diag').textContent=`v5 · 지도 ${ok(typeof L!=='undefined')} 통신 ${ok(typeof mqtt!=='undefined')} QR ${ok(typeof qrcode!=='undefined')}`;
+  $('#diag').textContent=`v6 · 지도 ${ok(typeof L!=='undefined')} 통신 ${ok(typeof mqtt!=='undefined')} QR ${ok(typeof qrcode!=='undefined')}`;
 })();
 
+let tLabels='hard', soloLabels='mid';
+document.querySelectorAll('#tSeg button').forEach(b=>b.onclick=()=>{ tLabels=b.dataset.v;
+  document.querySelectorAll('#tSeg button').forEach(x=>x.classList.toggle('on',x===b)); });
+document.querySelectorAll('#soloSeg button').forEach(b=>b.onclick=()=>{ soloLabels=b.dataset.v;
+  document.querySelectorAll('#soloSeg button').forEach(x=>x.classList.toggle('on',x===b)); });
 const RULE_DESC={buzz:'모두에게 같은 지명이 뜨고, 먼저 정답을 누른 사람만 점수를 가져가요. 빠를수록·연속으로 맞힐수록 점수가 커집니다.',
   score:'각자 다른 순서로 풀고 제한 시간 안에 점수를 가장 많이 얻는 사람이 이겨요.',
   survival:'시간 제한 없이 계속 떨어져요. 목숨 3개가 다 닳으면 탈락, 점수 순으로 순위를 매겨요.',
@@ -3869,7 +3901,8 @@ const RULE_DESC={buzz:'모두에게 같은 지명이 뜨고, 먼저 정답을 �
 const syncRule=()=>{ $('#ruleDesc').textContent=RULE_DESC[$('#rule').value]; $('#durWrap').style.display=['score','buzz'].includes($('#rule').value)?'':'none'; };
 $('#rule').onchange=syncRule; syncRule();
 
-$('#btnSolo').onclick=()=>{ Snd.init(); Game.start('solo',{scope:$('#soloScope').value,labels:$('#soloLabels').value}); };
+$('#btnSolo').onclick=()=>show('#setup');
+$('#btnStartSolo').onclick=()=>{ Snd.init(); Game.start('solo',{scope:$('#soloScope').value,labels:soloLabels}); };
 $('#btnAgain').onclick=()=>{ Snd.init(); Game.start('solo',{scope:Game.scope,labels:Game.labels}); };
 $('#btnJoin').onclick=()=>{ $('#joinErr').textContent=''; show('#join'); };
 $('#btnConnect').onclick=()=>{ const c=$('#joinCode').value.trim().toUpperCase(), n=$('#joinName').value.trim();
@@ -3877,6 +3910,10 @@ $('#btnConnect').onclick=()=>{ const c=$('#joinCode').value.trim().toUpperCase()
   if(!n) return $('#joinErr').textContent='이름을 입력하세요.';
   Snd.init(); Net.join(c,n); };
 $('#btnTeacher').onclick=()=>{ show('#teacher'); Net.host(); };
+$('#btnCopy').onclick=()=>{ const t=$('#joinUrl').textContent;
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject())
+    .then(()=>{ $('#btnCopy').textContent='복사됨!'; setTimeout(()=>$('#btnCopy').textContent='참가 링크 복사',1500); })
+    .catch(()=>{ $('#btnCopy').textContent='주소를 길게 눌러 복사하세요'; }); };
 $('#joinCode').addEventListener('input',e=>{ e.target.value=e.target.value.toUpperCase(); });
 $('#joinName').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#btnConnect').click(); });
 const roomParam=(new URLSearchParams(location.search).get('room')||'').toUpperCase().slice(0,4);
