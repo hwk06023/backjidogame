@@ -3131,6 +3131,14 @@ var qrcode = function() {
     <p class="lab">백지도 범위</p>
     <select id="soloScope"></select>
     <p class="sub" id="soloScopeInfo"></p>
+    <p class="lab">지도 이름표</p>
+    <select id="soloLabels">
+      <option value="auto" selected>단계별 자동 (100→60→30→0%)</option>
+      <option value="1">모두 보이기</option>
+      <option value="0.6">60%만</option>
+      <option value="0.3">30%만</option>
+      <option value="0">모두 숨기기</option>
+    </select>
     <button id="btnSolo">혼자 연습하기</button>
     <button id="btnJoin" class="ghost">참가 코드로 대결하기</button>
     <button id="btnTeacher" class="ghost">교사 모드 (대결 중계)</button>
@@ -3176,6 +3184,14 @@ var qrcode = function() {
           <option value="score">점수 대결</option>
           <option value="survival">서바이벌</option>
           <option value="race">완주 레이스</option>
+        </select></label>
+      <label class="sub">지도 이름표
+        <select id="tLabels">
+          <option value="auto">단계별 자동 (100→60→30→0%)</option>
+          <option value="1">모두 보이기 (쉬움)</option>
+          <option value="0.6">60%만</option>
+          <option value="0.3">30%만</option>
+          <option value="0" selected>모두 숨기기 (어려움)</option>
         </select></label>
       <label class="sub" id="durWrap">제한 시간
         <select id="duration"><option value="60">60초</option><option value="90">90초</option><option value="120" selected>120초</option><option value="180">180초</option></select></label>
@@ -3402,9 +3418,18 @@ const Game = {
   timeLimit:0, timeLeft:0, timerInt:null, startAt:0,
   buzz:false, locked:false, qi:-1,
   fallTime(){ return Math.max(3.5, 8 - (this.round-1)*1.2) * 1000; },
-  labelRatio(){ return [1,.6,.3,0][Math.min(this.round-1,3)]; },
+  labelRatio(){
+    if(this.labels!=null && this.labels!=='auto') return +this.labels;
+    if(this.buzz) return 1;
+    return [1,.6,.3,0][Math.min(this.round-1,3)]; },
+  applyLabels(){
+    const n=Math.round(UNITS.length*this.labelRatio()); const shown=UNITS.slice(); this.shuffle(shown);
+    const vis=new Set(shown.slice(0,n).map(u=>u.id));
+    UNITS.forEach(u=>u.txt.classList.toggle('hide',!vis.has(u.id)));
+  },
   start(mode,opt={}){
-    const {seed=null,timeLimit=0,scope='nation',rule='score'}=opt;
+    const {seed=null,timeLimit=0,scope='nation',rule='score',labels='auto'}=opt;
+    this.labels=labels;
     this.mode=mode; this.scope=scope; this.rule=rule; this.startAt=performance.now();
     this.buzz = (rule==='buzz'); this.locked=false; this.qi=-1;
     this.score=0; this.lives=3; this.round=1; this.combo=0; this.correct=0; this.over=false;
@@ -3417,8 +3442,10 @@ const Game = {
     $('#stage').style.display=this.buzz?'none':'';
     $('#scopeTag').textContent = scopeName(scope)+' 백지도';
     show('#game'); drawScope(scope); setTimeout(()=>{ if(map){map.invalidateSize();fitScope();} },60);
-    if(this.buzz){ this.pool=[]; UNITS.forEach(u=>{u.done=false;u.setStyle(STYLE.base);u.txt.classList.remove('done','hide');});
-      this.banner('준비!','같은 문제 · 먼저 누르는 사람이 점수'); this.hud(); }
+    if(this.buzz){ this.pool=[]; UNITS.forEach(u=>{u.done=false;u.setStyle(STYLE.base);u.txt.classList.remove('done');});
+      this.applyLabels();
+      this.banner('준비!', this.labelRatio()<1?'이름표 '+Math.round(this.labelRatio()*100)+'% · 먼저 누르는 사람이 점수':'같은 문제 · 먼저 누르는 사람이 점수');
+      this.hud(); }
     else { this.newRound(true); this.hud(); }
     Snd.start(this.buzz?150:132);
     clearInterval(this.timerInt);
@@ -3426,13 +3453,11 @@ const Game = {
   },
   newRound(first){
     if(!first){ this.round++; Snd.sfxClear(); Snd.tempo=132+this.round*10;
-      this.banner(this.round+'단계!','이름표 '+Math.round(this.labelRatio()*100)+'% · 더 빨라져요'); }
+      this.banner(this.round+'단계!', (this.labels==='auto'||this.labels==null?'이름표 '+Math.round(this.labelRatio()*100)+'% · ':'')+'더 빨라져요'); }
     else this.banner(scopeName(this.scope),UNITS.length+'개 지역 · 이름표 모두 보임');
     this.pool=UNITS.slice(); this.shuffle(this.pool);
     UNITS.forEach(u=>{ u.done=false; u.setStyle(STYLE.base); u.txt.classList.remove('done'); });
-    const n=Math.round(UNITS.length*this.labelRatio()); const shown=UNITS.slice(); this.shuffle(shown);
-    const vis=new Set(shown.slice(0,n).map(u=>u.id));
-    UNITS.forEach(u=>u.txt.classList.toggle('hide',!vis.has(u.id)));
+    this.applyLabels();
     this.hud(); setTimeout(()=>this.spawn(), first?1000:1500);
   },
   shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(this.rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];} },
@@ -3641,7 +3666,7 @@ const Net = {
     if(d.t==='start'){
       if($('#game').classList.contains('on') && !Game.over) return;   // 이미 진행 중이면 무시
       if(this.lastSeed===d.seed && Game.over===false) return;
-      this.lastSeed=d.seed; Game.start('battle',{seed:d.seed,timeLimit:d.duration,scope:d.scope,rule:d.rule}); }
+      this.lastSeed=d.seed; Game.start('battle',{seed:d.seed,timeLimit:d.duration,scope:d.scope,rule:d.rule,labels:d.labels}); }
     if(d.t==='q'){ Game.showQuestion(d); }
     if(d.t==='qres'){ Game.resolveQuestion(d); }
     if(d.t==='lb'){ $('#lb').innerHTML=d.list.slice(0,6).map((p,i)=>`<div class="${p.me===Bus.myId?'me':''}"><span>${i+1}. ${p.name}</span><b>${p.disp}</b></div>`).join(''); }
@@ -3779,14 +3804,16 @@ const Net = {
     .sort((a,b)=>this.cmp(a._p,b._p)).map(({_p,...x})=>x); },
   queueLb(){ if(this.lbTimer) return; this.lbTimer=setTimeout(()=>{ this.lbTimer=null; this.bcast({t:'lb',list:this.ranked()}); },900); },
   startBattle(){
-    const duration=+$('#duration').value, rule=$('#rule').value, scope=$('#tScope').value, seed=Math.floor(Math.random()*1e9);
+    const duration=+$('#duration').value, rule=$('#rule').value, scope=$('#tScope').value,
+          labels=$('#tLabels').value, seed=Math.floor(Math.random()*1e9);
     this.rule=rule; this.finishCount=0;
     this.players.forEach(p=>Object.assign(p,{score:0,lives:3,combo:0,last:'',ok:null,done:false,correct:0,elapsed:0,finished:false,rank:0,won:new Set(),miss:null,streak:0}));
-    this.session={active:true,msg:{seed,duration,rule,scope}};
+    this.session={active:true,msg:{seed,duration,rule,scope,labels}};
     this.mini=buildMini(scope); $('#qNow').classList.remove('on');
-    this.bcast({t:'start',seed,duration,rule,scope});
-    setTimeout(()=>this.bcast({t:'start',seed,duration,rule,scope}),700);   // 유실 대비 한 번 더
-    setTimeout(()=>this.bcast({t:'start',seed,duration,rule,scope}),2000);  // 두 번 더
+    const startMsg={t:'start',seed,duration,rule,scope,labels};
+    this.bcast(startMsg);
+    setTimeout(()=>this.bcast(startMsg),700);    // 유실 대비 한 번 더
+    setTimeout(()=>this.bcast(startMsg),2000);   // 두 번 더
     $('#btnStart').disabled=true; $('#btnEnd').disabled=false; $('#podium').style.display='none';
     clearInterval(this.tTimer); this.tLeft=0;
     if(rule==='buzz'){
@@ -3842,8 +3869,8 @@ const RULE_DESC={buzz:'모두에게 같은 지명이 뜨고, 먼저 정답을 �
 const syncRule=()=>{ $('#ruleDesc').textContent=RULE_DESC[$('#rule').value]; $('#durWrap').style.display=['score','buzz'].includes($('#rule').value)?'':'none'; };
 $('#rule').onchange=syncRule; syncRule();
 
-$('#btnSolo').onclick=()=>{ Snd.init(); Game.start('solo',{scope:$('#soloScope').value}); };
-$('#btnAgain').onclick=()=>{ Snd.init(); Game.start('solo',{scope:Game.scope}); };
+$('#btnSolo').onclick=()=>{ Snd.init(); Game.start('solo',{scope:$('#soloScope').value,labels:$('#soloLabels').value}); };
+$('#btnAgain').onclick=()=>{ Snd.init(); Game.start('solo',{scope:Game.scope,labels:Game.labels}); };
 $('#btnJoin').onclick=()=>{ $('#joinErr').textContent=''; show('#join'); };
 $('#btnConnect').onclick=()=>{ const c=$('#joinCode').value.trim().toUpperCase(), n=$('#joinName').value.trim();
   if(c.length!==4) return $('#joinErr').textContent='참가 코드 4자리를 입력하세요.';
