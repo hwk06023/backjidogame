@@ -3092,6 +3092,17 @@ var qrcode = function() {
   tr.top td:first-child::before{content:"🥇 "} tr.second td:first-child::before{content:"🥈 "} tr.third td:first-child::before{content:"🥉 "}
   .bar{height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden}
   .bar i{display:block;height:100%;background:var(--green);transition:width .4s}
+  .mini{width:96px;height:96px;display:block;background:rgba(255,255,255,.06);border-radius:8px}
+  .mini path{fill:#4a5a75;stroke:#0f1b2d;stroke-width:.8}
+  .mini path.won{fill:var(--green)} .mini path.miss{fill:var(--red)} .mini path.gone{fill:#7d8798}
+  td.mapcell{width:104px}
+  #qNow{display:none;flex-direction:column;gap:4px;align-items:center;background:rgba(255,214,10,.12);
+    border:1px solid rgba(255,214,10,.4);border-radius:16px;padding:12px}
+  #qNow.on{display:flex}
+  #qName{font-family:'Jua',sans-serif;font-size:clamp(28px,7vw,46px);color:var(--yellow);line-height:1}
+  #qWin{font-size:15px;min-height:1.4em;color:var(--green);font-weight:700}
+  #feed{max-height:120px;overflow:auto;font-size:13px;text-align:left;display:flex;flex-direction:column-reverse;gap:2px}
+  #feed div{opacity:.85}
   .podium{display:flex;align-items:flex-end;justify-content:center;gap:10px;height:170px;margin:10px 0}
   .podium div{flex:1;max-width:120px;background:linear-gradient(180deg,var(--yellow),#d9a400);border-radius:10px 10px 0 0;color:var(--ink);
     display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:8px 4px;font-weight:700;animation:rise 1s ease-out}
@@ -3161,6 +3172,7 @@ var qrcode = function() {
       <label class="sub">백지도 범위 <select id="tScope"></select></label>
       <label class="sub">대결 방식
         <select id="rule">
+          <option value="buzz" selected>같은 문제 · 먼저 누르기</option>
           <option value="score">점수 대결</option>
           <option value="survival">서바이벌</option>
           <option value="race">완주 레이스</option>
@@ -3174,8 +3186,10 @@ var qrcode = function() {
       <button id="btnEnd" class="ghost" disabled>종료</button>
     </div>
     <div class="row sub"><span id="tCount">참가자 0명</span> · <span id="tTimer"></span> · <span class="lab">v4</span></div>
+    <div id="qNow"><span class="lab">지금 문제</span><div id="qName">—</div><div id="qWin"></div></div>
+    <div id="feed"></div>
     <div id="podium" class="podium" style="display:none"></div>
-    <table><thead><tr><th>이름</th><th>최근</th><th>연속</th><th>목숨</th><th class="n" id="thScore">점수</th></tr></thead><tbody id="tBody"></tbody></table>
+    <table><thead><tr><th>이름</th><th>진행 지도</th><th>최근</th><th>연속</th><th class="n" id="thScore">점수</th></tr></thead><tbody id="tBody"></tbody></table>
     <button class="ghost back small" style="align-self:center">메뉴로</button>
   </div>
 </section>
@@ -3270,6 +3284,31 @@ function buildContext(scope){
   return [];
 }
 
+/* ================= 교사용 미니 지도 ================= */
+function buildMini(scope){
+  const units=buildUnits(scope); let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  const rings=[];
+  units.forEach(u=>{
+    const rs=[];
+    u.features.forEach(f=>{
+      const polys = f.geometry.type==='MultiPolygon' ? f.geometry.coordinates : [f.geometry.coordinates];
+      polys.forEach(poly=>{ const r=poly[0]; if(!r||r.length<3) return; rs.push(r);
+        r.forEach(([lon,lat])=>{ if(lon<x0)x0=lon; if(lon>x1)x1=lon; if(lat<y0)y0=lat; if(lat>y1)y1=lat; }); });
+    });
+    rings.push({id:u.id,rs});
+  });
+  const W=100, H=100, sx=(x1-x0)||1, sy=(y1-y0)||1, k=Math.min(W/sx,H/sy);
+  const ox=(W-sx*k)/2, oy=(H-sy*k)/2;
+  const px=lon=>(ox+(lon-x0)*k).toFixed(1), py=lat=>(oy+(y1-lat)*k).toFixed(1);
+  const shapes=rings.map(g=>({id:g.id, d:g.rs.map(r=>'M'+r.map(([lo,la])=>px(lo)+' '+py(la)).join('L')+'Z').join('')}));
+  return {vb:'0 0 100 100', shapes};
+}
+function miniSVG(mini,cls){   // cls: {unitId:'won'|'miss'|'gone'}
+  if(!mini) return '';
+  return `<svg class="mini" viewBox="${mini.vb}">`+mini.shapes.map(s=>
+    `<path d="${s.d}" class="${cls[s.id]||''}"></path>`).join('')+'</svg>';
+}
+
 /* ================= 유틸 ================= */
 const $ = s=>document.querySelector(s);
 const show = id=>{document.querySelectorAll('.screen,#game').forEach(e=>e.classList.remove('on'));$(id).classList.add('on');};
@@ -3361,20 +3400,27 @@ const Game = {
   mode:'solo', scope:'nation', rule:'score', score:0, lives:3, round:1, combo:0, correct:0,
   pool:[], cur:null, raf:null, t0:0, dur:0, over:false, rng:Math.random,
   timeLimit:0, timeLeft:0, timerInt:null, startAt:0,
+  buzz:false, locked:false, qi:-1,
   fallTime(){ return Math.max(3.5, 8 - (this.round-1)*1.2) * 1000; },
   labelRatio(){ return [1,.6,.3,0][Math.min(this.round-1,3)]; },
   start(mode,opt={}){
     const {seed=null,timeLimit=0,scope='nation',rule='score'}=opt;
     this.mode=mode; this.scope=scope; this.rule=rule; this.startAt=performance.now();
+    this.buzz = (rule==='buzz'); this.locked=false; this.qi=-1;
     this.score=0; this.lives=3; this.round=1; this.combo=0; this.correct=0; this.over=false;
     this.rng = seed!=null ? mulberry32(seed) : Math.random;
     this.timeLimit = rule==='score' ? (timeLimit||0) : 0; this.timeLeft=this.timeLimit;
     $('#timer').style.display = this.timeLimit?'':'none';
     $('#timeLeft').textContent = this.timeLimit;
     $('#lb').classList.toggle('on', mode==='battle');
+    $('#lives').style.display=this.buzz?'none':'';
+    $('#stage').style.display=this.buzz?'none':'';
     $('#scopeTag').textContent = scopeName(scope)+' 백지도';
     show('#game'); drawScope(scope); setTimeout(()=>{ if(map){map.invalidateSize();fitScope();} },60);
-    this.newRound(true); this.hud(); Snd.start(132);
+    if(this.buzz){ this.pool=[]; UNITS.forEach(u=>{u.done=false;u.setStyle(STYLE.base);u.txt.classList.remove('done','hide');});
+      this.banner('준비!','같은 문제 · 먼저 누르는 사람이 점수'); this.hud(); }
+    else { this.newRound(true); this.hud(); }
+    Snd.start(this.buzz?150:132);
     clearInterval(this.timerInt);
     if(this.timeLimit) this.timerInt=setInterval(()=>{ this.timeLeft--; $('#timeLeft').textContent=this.timeLeft; if(this.timeLeft<=0) this.end('time'); },1000);
   },
@@ -3391,7 +3437,7 @@ const Game = {
   },
   shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(this.rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];} },
   spawn(){
-    if(this.over) return;
+    if(this.over||this.buzz) return;
     if(this.pool.length===0){ if(this.rule==='race'&&this.mode==='battle'){ this.end('race'); return; } this.newRound(false); return; }
     const u=this.pool[0], el=document.createElement('div');
     el.className='word fall '+u.type;
@@ -3408,9 +3454,54 @@ const Game = {
     this.raf=requestAnimationFrame(step);
   },
   progress(){ return Math.min(1,(performance.now()-this.t0)/this.dur); },
+  /* --- 같은 문제 모드 --- */
+  showQuestion(q){
+    if(this.over) return;
+    const u=UNITS.find(x=>x.id===q.uid); if(!u) return;
+    if(this.cur){ this.cur.el.remove(); this.cur=null; }
+    cancelAnimationFrame(this.raf);
+    this.qi=q.qi; this.locked=false;
+    const el=document.createElement('div'); el.className='word fall '+u.type;
+    el.innerHTML=`<span class="tag ${u.type}">${tagText(u.type,u.name)}</span>${u.name}`;
+    $('#play').appendChild(el);
+    el.style.left=Math.round(($('#play').clientWidth-el.offsetWidth)/2)+'px';
+    this.cur={u,el}; this.t0=performance.now(); this.dur=q.dur;
+    const step=now=>{ if(!this.cur||this.cur.el!==el) return;
+      const p=Math.min(1,(now-this.t0)/this.dur), h=$('#play').clientHeight-el.offsetHeight-8;
+      el.style.transform=`translateY(${p*h}px)`;
+      if(p<1) this.raf=requestAnimationFrame(step); };
+    this.raf=requestAnimationFrame(step);
+  },
+  resolveQuestion(r){
+    if(this.over) return;
+    cancelAnimationFrame(this.raf);
+    if(this.cur){ this.cur.el.remove(); this.cur=null; }
+    const u=UNITS.find(x=>x.id===r.uid);
+    if(u){ u.txt.classList.remove('hide');
+      if(r.winnerId){ u.done=true; u.flash(STYLE.ok,STYLE.done,700); u.txt.classList.add('done');
+        const [x,y]=centerXY(u); this.burst(x,y); }
+      else u.flash(STYLE.ng,STYLE.base,700);
+    }
+    if(r.scores && r.scores[Bus.myId]!=null){ this.score=r.scores[Bus.myId]; }
+    this.hud();
+    if(r.winnerId===Bus.myId){ Snd.sfxOk(3); this.banner('내가 먼저!','+'+r.gain+'점'); }
+    else if(r.winnerId){ Snd.sfxNg(); this.banner(r.winner+' 정답','아쉽다! 다음 문제'); }
+    else { Snd.sfxLife(); this.banner('아무도 못 맞힘',u?u.name:''); }
+    this.locked=true;
+  },
   click(u){
     if(this.over||!this.cur||u.done) return; Snd.init();
     const [x,y]=centerXY(u);
+    if(this.buzz){
+      if(this.locked) return;
+      const ms=Math.round(performance.now()-this.t0);
+      if(u===this.cur.u){ this.locked=true; u.flash(STYLE.ok,STYLE.base,600); this.pop('🔔',x,y,false); Snd.sfxOk(1);
+        Net.send({t:'buzz',qi:this.qi,uid:u.id,ok:true,ms}); }
+      else { u.flash(STYLE.ng,STYLE.base,500); this.pop('✗',x,y,true); Snd.sfxNg();
+        $('#play').classList.remove('shake'); void $('#play').offsetWidth; $('#play').classList.add('shake');
+        Net.send({t:'buzz',qi:this.qi,uid:u.id,ok:false,ms}); }
+      return;
+    }
     if(u===this.cur.u){
       const speed=Math.round(200*(1-this.progress()));
       const base=this.mode==='battle'?100+speed:100+Math.round(speed/2);
@@ -3420,12 +3511,12 @@ const Game = {
       this.pool.shift(); this.cur.el.remove(); this.cur=null;
       this.pop('+'+gain,x,y,false); this.burst(x,y); Snd.sfxOk(this.combo);
       if(this.combo>=2){ const c=$('#combo'); c.textContent=this.combo+' COMBO!'+(this.combo>=5?' 🔥':''); c.classList.remove('show'); void c.offsetWidth; c.classList.add('show'); }
-      this.hud(); this.report(u.short,true); setTimeout(()=>this.spawn(),450);
+      this.hud(); this.report(u.short,true,u.id); setTimeout(()=>this.spawn(),450);
     } else {
       this.combo=0; u.flash(STYLE.ng,STYLE.base,500);
       this.pop('✗',x,y,true); Snd.sfxNg();
       $('#play').classList.remove('shake'); void $('#play').offsetWidth; $('#play').classList.add('shake');
-      this.hud(); this.report(u.short,false);
+      this.hud(); this.report(u.short,false,u.id);
     }
   },
   miss(){
@@ -3434,7 +3525,7 @@ const Game = {
     this.lives--; Snd.sfxLife();
     $('#play').classList.remove('shake'); void $('#play').offsetWidth; $('#play').classList.add('shake');
     this.pool.push(this.pool.shift());
-    this.hud(); this.report(u.short+' 놓침',false);
+    this.hud(); this.report(u.short+' 놓침',false,null);
     if(this.lives<=0){ this.end('lives'); return; }
     setTimeout(()=>this.spawn(),700);
   },
@@ -3450,7 +3541,7 @@ const Game = {
   banner(t,s){ const b=$('#banner'); b.firstElementChild.innerHTML=t+(s?`<small>${s}</small>`:'');
     b.classList.remove('on'); void b.offsetWidth; b.classList.add('on'); setTimeout(()=>b.classList.remove('on'),1700); },
   elapsed(){ return Math.round((performance.now()-this.startAt)/100)/10; },
-  report(last,ok){ if(this.mode==='battle') Net.send({t:'score',score:this.score,lives:this.lives,combo:this.combo,last,ok,round:this.round,correct:this.correct,elapsed:this.elapsed()}); },
+  report(last,ok,uid){ if(this.mode==='battle') Net.send({t:'score',score:this.score,lives:this.lives,combo:this.combo,last,ok,uid,round:this.round,correct:this.correct,elapsed:this.elapsed()}); },
   end(reason){
     if(this.over) return; this.over=true; cancelAnimationFrame(this.raf); clearInterval(this.timerInt); Snd.stop();
     if(this.cur){ this.cur.el.remove(); this.cur=null; }
@@ -3551,6 +3642,8 @@ const Net = {
       if($('#game').classList.contains('on') && !Game.over) return;   // 이미 진행 중이면 무시
       if(this.lastSeed===d.seed && Game.over===false) return;
       this.lastSeed=d.seed; Game.start('battle',{seed:d.seed,timeLimit:d.duration,scope:d.scope,rule:d.rule}); }
+    if(d.t==='q'){ Game.showQuestion(d); }
+    if(d.t==='qres'){ Game.resolveQuestion(d); }
     if(d.t==='lb'){ $('#lb').innerHTML=d.list.slice(0,6).map((p,i)=>`<div class="${p.me===Bus.myId?'me':''}"><span>${i+1}. ${p.name}</span><b>${p.disp}</b></div>`).join(''); }
     if(d.t==='end'){ Game.end('force'); const me=d.list.findIndex(p=>p.me===Bus.myId);
       $('#resRank').innerHTML=`<div class="disp" style="font-size:28px;color:var(--yellow)">${me>=0?(me+1)+'등!':''}</div>`+
@@ -3578,7 +3671,7 @@ const Net = {
     const id=m.from;
     if(m.t==='join'){
       if(!this.players.has(id)) this.players.set(id,{name:m.name,score:0,lives:3,combo:0,last:'',ok:null,
-        done:false,correct:0,elapsed:0,finished:false,rank:0,seen:Date.now(),offline:false});
+        done:false,correct:0,elapsed:0,finished:false,rank:0,seen:Date.now(),offline:false,won:new Set(),miss:null,streak:0});
       const p=this.players.get(id); p.name=m.name; p.seen=Date.now(); p.offline=false;
       Bus.send({t:'ack',to:id});
       if(this.session && this.session.active) Bus.send(Object.assign({t:'start',to:id},this.session.msg));  // 진행 중이면 바로 합류
@@ -3592,12 +3685,68 @@ const Net = {
       // 시작 신호를 못 받고 대기 중인 학생에게 다시 보내 준다
       if(this.session && this.session.active && m.st==='wait') Bus.send(Object.assign({t:'start',to:id},this.session.msg));
       this.renderTable(); }
-    if(m.t==='score'){ Object.assign(p,{score:m.score,lives:m.lives,combo:m.combo,last:m.last,ok:m.ok,round:m.round,correct:m.correct,elapsed:m.elapsed}); this.renderTable(); this.queueLb(); }
+    if(m.t==='buzz'){ this.onBuzz(id,p,m); return; }
+    if(m.t==='score'){ if(m.uid){ if(m.ok) p.won.add(m.uid); else p.miss=m.uid; } Object.assign(p,{score:m.score,lives:m.lives,combo:m.combo,last:m.last,ok:m.ok,round:m.round,correct:m.correct,elapsed:m.elapsed}); this.renderTable(); this.queueLb(); }
     if(m.t==='done'){ Object.assign(p,{done:true,score:m.score,correct:m.correct,elapsed:m.elapsed,finished:m.finished});
       if(p.finished&&!p.rank) p.rank=++this.finishCount;
       this.renderTable(); this.queueLb();
       const active=[...this.players.values()].filter(x=>!x.offline);
       if(active.length&&active.every(x=>x.done)) this.endBattle(); }
+  },
+  /* ---- 같은 문제 · 먼저 누르기 ---- */
+  feed(html){ const f=$('#feed'); const d=document.createElement('div'); d.innerHTML=html; f.prepend(d);
+    while(f.children.length>25) f.lastChild.remove(); },
+  startBuzz(scope,duration){
+    this.qOrder=buildUnits(scope).map(u=>({id:u.id,name:u.name})); 
+    for(let i=this.qOrder.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [this.qOrder[i],this.qOrder[j]]=[this.qOrder[j],this.qOrder[i]]; }
+    this.qIndex=-1; this.qDur=6500; this.buzzEnd=Date.now()+duration*1000;
+    $('#qNow').classList.add('on'); $('#feed').innerHTML='';
+    setTimeout(()=>this.nextQ(),2200);
+  },
+  nextQ(){
+    if(!this.session||!this.session.active) return;
+    if(Date.now()>=this.buzzEnd || this.qIndex>=this.qOrder.length-1){ this.endBattle(); return; }
+    this.qIndex++; const q=this.qOrder[this.qIndex];
+    this.qOpen=true; this.qWinner=null; this.qStart=Date.now();
+    $('#qName').textContent=q.name; $('#qWin').textContent='';
+    const msg={t:'q',qi:this.qIndex,uid:q.id,name:q.name,dur:this.qDur};
+    this.bcast(msg); setTimeout(()=>this.bcast(msg),350);
+    clearTimeout(this.qTimer);
+    this.qTimer=setTimeout(()=>this.resolveQ(),this.qDur+700);
+  },
+  onBuzz(id,p,m){
+    if(!this.qOpen || m.qi!==this.qIndex) return;
+    if(m.ok){
+      if(this.qWinner) return;                       // 이미 누군가 먼저 눌렀다
+      this.qWinner={id,p,ms:m.ms};
+      this.resolveQ();
+    } else {
+      p.score=Math.max(0,p.score-50); p.miss=m.uid; p.streak=0; p.last=m.uid?'오답':'오답'; p.ok=false;
+      this.feed(`<span style="color:var(--red)">✗ ${p.name}</span> 오답 −50`);
+      this.renderTable();
+    }
+  },
+  resolveQ(){
+    if(!this.qOpen) return; this.qOpen=false; clearTimeout(this.qTimer);
+    const q=this.qOrder[this.qIndex]; let gain=0;
+    if(this.qWinner){
+      const {id,p,ms}=this.qWinner;
+      gain=300+Math.max(0,Math.round(500*(1-ms/this.qDur)));
+      p.streak=(p.streak||0)+1; if(p.streak>=2) gain+=100*(p.streak-1);
+      p.score+=gain; p.correct=(p.correct||0)+1; p.won.add(q.id); p.combo=p.streak; p.last=q.name; p.ok=true;
+      this.players.forEach((o,oid)=>{ if(oid!==id){ o.streak=0; o.combo=0; } });
+      $('#qWin').textContent=`🔔 ${p.name} · ${(ms/1000).toFixed(2)}초 · +${gain}점`;
+      this.feed(`<b style="color:var(--green)">🔔 ${p.name}</b> ${q.name} ${(ms/1000).toFixed(2)}초 <b>+${gain}</b>`);
+    } else {
+      $('#qWin').textContent='아무도 못 맞혔어요';
+      this.feed(`<span style="opacity:.6">— ${q.name} 아무도 못 맞힘</span>`);
+    }
+    const scores={}; this.players.forEach((p,id)=>scores[id]=p.score);
+    const res={t:'qres',qi:this.qIndex,uid:q.id,winner:this.qWinner?this.qWinner.p.name:null,
+      winnerId:this.qWinner?this.qWinner.id:null,gain,scores};
+    this.bcast(res); setTimeout(()=>this.bcast(res),300);
+    this.renderTable(); this.queueLb();
+    setTimeout(()=>this.nextQ(),1600);
   },
   joinURL(){
     if(location.protocol==='file:') return '(로컬 파일 실행 중 — 학생은 참가 코드 '+this.code+' 를 직접 입력하세요)';
@@ -3618,9 +3767,11 @@ const Net = {
     this.bcast({t:'players',list}); $('#tCount').textContent='참가자 '+list.length+'명';
     $('#btnStart').disabled=list.length===0;
   },
-  disp(p){ return this.rule==='race' ? (p.finished?p.elapsed+'초':'정답 '+(p.correct||0)+(p.done?' (탈락)':''))
+  disp(p){ if(this.rule==='buzz') return p.score+'점'+(p.streak>1?' '+p.streak+'연속':'');
+    return this.rule==='race' ? (p.finished?p.elapsed+'초':'정답 '+(p.correct||0)+(p.done?' (탈락)':''))
     : this.rule==='survival' ? (p.score+'점'+(p.done?' ✝':' ❤'+p.lives)) : p.score+'점'; },
   cmp(a,b){
+    if(this.rule==='buzz') return b.score-a.score;
     if(this.rule==='race'){ if(a.finished!==b.finished) return a.finished?-1:1; if(a.finished) return a.elapsed-b.elapsed; return (b.correct||0)-(a.correct||0); }
     if(this.rule==='survival'){ if(a.done!==b.done) return a.done?1:-1; return b.score-a.score; }
     return b.score-a.score; },
@@ -3630,20 +3781,27 @@ const Net = {
   startBattle(){
     const duration=+$('#duration').value, rule=$('#rule').value, scope=$('#tScope').value, seed=Math.floor(Math.random()*1e9);
     this.rule=rule; this.finishCount=0;
-    this.players.forEach(p=>Object.assign(p,{score:0,lives:3,combo:0,last:'',ok:null,done:false,correct:0,elapsed:0,finished:false,rank:0}));
+    this.players.forEach(p=>Object.assign(p,{score:0,lives:3,combo:0,last:'',ok:null,done:false,correct:0,elapsed:0,finished:false,rank:0,won:new Set(),miss:null,streak:0}));
     this.session={active:true,msg:{seed,duration,rule,scope}};
+    this.mini=buildMini(scope); $('#qNow').classList.remove('on');
     this.bcast({t:'start',seed,duration,rule,scope});
     setTimeout(()=>this.bcast({t:'start',seed,duration,rule,scope}),700);   // 유실 대비 한 번 더
     setTimeout(()=>this.bcast({t:'start',seed,duration,rule,scope}),2000);  // 두 번 더
     $('#btnStart').disabled=true; $('#btnEnd').disabled=false; $('#podium').style.display='none';
     clearInterval(this.tTimer); this.tLeft=0;
+    if(rule==='buzz'){
+      this.tLeft=duration; $('#tTimer').textContent='남은 시간 '+duration+'초';
+      this.tTimer=setInterval(()=>{ this.tLeft--; $('#tTimer').textContent='남은 시간 '+this.tLeft+'초'; },1000);
+      this.startBuzz(scope,duration); this.renderTable(); return;
+    }
     if(rule==='score'){ this.tLeft=duration; $('#tTimer').textContent='남은 시간 '+duration+'초';
       this.tTimer=setInterval(()=>{ this.tLeft--; $('#tTimer').textContent='남은 시간 '+this.tLeft+'초'; if(this.tLeft<=0) this.endBattle(); },1000); }
     else { $('#tTimer').textContent='진행 중'; this.tTimer=setInterval(()=>{ this.tLeft++; $('#tTimer').textContent='진행 '+this.tLeft+'초'; },1000); }
     this.renderTable();
   },
   endBattle(){
-    clearInterval(this.tTimer); $('#tTimer').textContent='종료';
+    clearInterval(this.tTimer); clearTimeout(this.qTimer); this.qOpen=false; $('#tTimer').textContent='종료';
+    $('#qNow').classList.remove('on');
     if(this.session) this.session.active=false;
     const list=this.ranked(); this.bcast({t:'end',list}); setTimeout(()=>this.bcast({t:'end',list}),700);
     $('#btnEnd').disabled=true; $('#btnStart').disabled=this.players.size===0;
@@ -3656,12 +3814,15 @@ const Net = {
     const max=Math.max(1,...[...this.players.values()].map(key));
     const arr=[...this.players.values()].sort((a,b)=>this.cmp(a,b));
     $('#thScore').textContent=this.rule==='race'?'기록':'점수';
-    $('#tBody').innerHTML=arr.map((p,i)=>`<tr class="${['top','second','third'][i]||''}">
+    $('#tBody').innerHTML=arr.map((p,i)=>{
+      const cls={}; (p.won||new Set()).forEach(id=>cls[id]='won'); if(p.miss) cls[p.miss]='miss';
+      return `<tr class="${['top','second','third'][i]||''}">
       <td>${p.name}${p.offline?' <small style="color:var(--red)">연결끊김</small>':p.rank?` <small style="color:var(--yellow)">${p.rank}위 완주</small>`:p.done?' <small style="opacity:.6">(종료)</small>':''}
         <div class="bar"><i style="width:${key(p)/max*100}%"></i></div></td>
+      <td class="mapcell">${miniSVG(this.mini,cls)}</td>
       <td style="color:${p.ok===true?'var(--green)':p.ok===false?'var(--red)':'inherit'}">${p.last||'—'}</td>
-      <td>${p.combo?p.combo+'🔥':''}</td><td>${'❤️'.repeat(Math.max(0,p.lives))}</td>
-      <td class="n"><b>${this.disp(p)}</b></td></tr>`).join('');
+      <td>${p.combo?p.combo+'🔥':''}</td>
+      <td class="n"><b>${this.disp(p)}</b></td></tr>`;}).join('');
   },
 };
 
@@ -3674,10 +3835,11 @@ $('#soloScope').onchange=scopeInfo; scopeInfo();
   $('#diag').textContent=`v5 · 지도 ${ok(typeof L!=='undefined')} 통신 ${ok(typeof mqtt!=='undefined')} QR ${ok(typeof qrcode!=='undefined')}`;
 })();
 
-const RULE_DESC={score:'제한 시간 안에 점수를 가장 많이 얻는 사람이 이겨요. 빨리 누를수록 보너스!',
+const RULE_DESC={buzz:'모두에게 같은 지명이 뜨고, 먼저 정답을 누른 사람만 점수를 가져가요. 빠를수록·연속으로 맞힐수록 점수가 커집니다.',
+  score:'각자 다른 순서로 풀고 제한 시간 안에 점수를 가장 많이 얻는 사람이 이겨요.',
   survival:'시간 제한 없이 계속 떨어져요. 목숨 3개가 다 닳으면 탈락, 점수 순으로 순위를 매겨요.',
   race:'범위를 한 바퀴 먼저 다 맞힌 사람이 이겨요. 완주 시간으로 순위를 매겨요.'};
-const syncRule=()=>{ $('#ruleDesc').textContent=RULE_DESC[$('#rule').value]; $('#durWrap').style.display=$('#rule').value==='score'?'':'none'; };
+const syncRule=()=>{ $('#ruleDesc').textContent=RULE_DESC[$('#rule').value]; $('#durWrap').style.display=['score','buzz'].includes($('#rule').value)?'':'none'; };
 $('#rule').onchange=syncRule; syncRule();
 
 $('#btnSolo').onclick=()=>{ Snd.init(); Game.start('solo',{scope:$('#soloScope').value}); };
