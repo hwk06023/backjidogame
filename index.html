@@ -3051,6 +3051,11 @@ var qrcode = function() {
   .stat b{font-size:23px;font-family:'Jua',sans-serif;font-variant-numeric:tabular-nums}
   .stat span{font-size:10px;color:#7a6320;letter-spacing:.14em;font-weight:700}
   #lives{font-size:21px;letter-spacing:1px}
+  #rankN.up{animation:rankUp .9s ease-out} #rankN.down{animation:rankDown .7s ease-out}
+  @keyframes rankUp{0%{transform:scale(.6);color:var(--mint)}40%{transform:scale(1.5);color:var(--mint)}100%{transform:scale(1)}}
+  @keyframes rankDown{0%{color:var(--coral)}100%{color:inherit}}
+  .delta{font-size:11px;font-weight:700;margin-left:4px}
+  .delta.up{color:var(--mint)} .delta.down{color:var(--coral)}
   #lives .x{opacity:.25;filter:grayscale(1)}
   #timer b{color:var(--coral)}
   #play{position:relative;flex:1;overflow:hidden;background:#EAF4FF}
@@ -3244,6 +3249,7 @@ var qrcode = function() {
     <div class="stat"><b id="score">0</b><span>SCORE</span></div>
     <div class="stat" id="timer" style="display:none"><b id="timeLeft">120</b><span>TIME</span></div>
     <div class="stat"><b id="left">0</b><span>남은 지역</span></div>
+    <div class="stat" id="rankBox" style="display:none"><b id="rankN">—</b><span>내 순위</span></div>
     <div id="lives">❤️❤️❤️</div>
     <button id="btnMute" class="small ghost" aria-label="소리 끄기">🔊</button>
   </div>
@@ -3463,7 +3469,11 @@ const Game = {
     $('#timer').style.display = this.timeLimit?'':'none';
     $('#timeLeft').textContent = this.timeLimit;
     $('#lb').classList.toggle('on', mode==='battle');
-    $('#lives').style.display=this.buzz?'none':'';
+    const useLives = (rule==='survival');
+    this.useLives=useLives;
+    $('#lives').style.display=useLives?'':'none';
+    $('#rankBox').style.display=(mode==='battle')?'':'none';
+    $('#rankN').textContent='—'; this.myRank=null;
     $('#scopeTag').textContent = scopeName(scope)+' 백지도';
     show('#game'); drawScope(scope); setTimeout(()=>{ if(map){map.invalidateSize();fitScope();} },60);
     if(this.buzz){ this.pool=[]; UNITS.forEach(u=>{u.done=false;u.setStyle(STYLE.base);u.txt.classList.remove('done');});
@@ -3486,7 +3496,15 @@ const Game = {
   shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(this.rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];} },
   spawn(){
     if(this.over||this.buzz) return;
-    if(this.pool.length===0){ this.end(this.rule==='race'&&this.mode==='battle'?'race':'clear'); return; }
+    if(this.pool.length===0){
+      if(this.mode==='battle' && this.rule==='score'){    // 시간이 끝날 때까지 계속 (한 바퀴 보너스)
+        this.score+=500; this.laps=(this.laps||0)+1;
+        this.banner('한 바퀴 완주!','보너스 +500 · 계속 갑니다');
+        UNITS.forEach(u=>{ u.done=false; u.setStyle(STYLE.base); u.txt.classList.remove('done'); });
+        this.applyLabels(); this.pool=UNITS.slice(); this.shuffle(this.pool);
+        this.hud(); this.report('한 바퀴 완주',true,null); setTimeout(()=>this.spawn(),1400); return;
+      }
+      this.end(this.rule==='race'&&this.mode==='battle'?'race':'clear'); return; }
     const u=this.pool[0], el=document.createElement('div');
     el.className='word fall '+u.type;
     el.innerHTML=`<span class="tag ${u.type}">${tagText(u.type,u.name)}</span>${u.name}`;
@@ -3569,12 +3587,19 @@ const Game = {
   },
   miss(){
     if(!this.cur) return; const {el,u}=this.cur; this.cur=null; this.combo=0;
-    el.classList.remove('fall'); el.style.background='var(--red)'; el.style.color='#fff'; setTimeout(()=>el.remove(),500);
-    this.lives--; Snd.sfxLife();
+    el.classList.remove('fall'); el.style.background='var(--coral)'; el.style.color='#fff'; setTimeout(()=>el.remove(),500);
+    Snd.sfxLife();
     $('#play').classList.remove('shake'); void $('#play').offsetWidth; $('#play').classList.add('shake');
-    this.pool.push(this.pool.shift());
-    this.hud(); this.report(u.short+' 놓침',false,null);
-    if(this.lives<=0){ this.end('lives'); return; }
+    const [mx,my]=centerXY(u); u.flash(STYLE.ng,STYLE.base,600); u.txt.classList.remove('hide');
+    this.pool.push(this.pool.shift());          // 놓친 지역은 뒤에서 다시 나온다
+    if(this.useLives){
+      this.lives--;
+      this.hud(); this.report(u.short+' 놓침',false,null);
+      if(this.lives<=0){ this.end('lives'); return; }
+    } else {
+      this.score=Math.max(0,this.score-50); this.pop('-50',mx,my,true);
+      this.hud(); this.report(u.short+' 놓침',false,null);
+    }
     setTimeout(()=>this.spawn(),700);
   },
   hud(){ $('#score').textContent=this.score;
@@ -3694,7 +3719,23 @@ const Net = {
       this.lastSeed=d.seed; Game.start('battle',{seed:d.seed,timeLimit:d.duration,scope:d.scope,rule:d.rule,labels:d.labels}); }
     if(d.t==='q'){ Game.showQuestion(d); }
     if(d.t==='qres'){ Game.resolveQuestion(d); }
-    if(d.t==='lb'){ $('#lb').innerHTML=d.list.slice(0,6).map((p,i)=>`<div class="${p.me===Bus.myId?'me':''}"><span>${i+1}. ${p.name}</span><b>${p.disp}</b></div>`).join(''); }
+    if(d.t==='lb'){ $('#lb').innerHTML=d.list.slice(0,6).map((p,i)=>`<div class="${p.me===Bus.myId?'me':''}"><span>${i+1}. ${p.name}</span><b>${p.disp}</b></div>`).join('');
+      const idx=d.list.findIndex(p=>p.me===Bus.myId);
+      if(idx>=0){
+        const r=idx+1, prev=Game.myRank; Game.myRank=r;
+        const el=$('#rankN'); el.textContent=r+'위'; $('#rankBox').style.display='';
+        if(prev && prev!==r){
+          el.classList.remove('up','down'); void el.offsetWidth; el.classList.add(r<prev?'up':'down');
+          if(r<prev && !Game.over){
+            Snd.sfxOk(2);
+            Game.banner(r===1?'1위 탈환!':r+'위로 점프!', prev+'위 → '+r+'위');
+          } else if(r>prev && r===2 && !Game.over){
+            const lead=d.list[0]; Game.banner('추월당했다!', (lead?lead.name+' 에게 밀림':''));
+          }
+        }
+        const lead=d.list[0], me=d.list[idx];
+        if(lead && me && lead.me!==me.me) $('#rankBox').title='선두와 '+(lead.score-me.score)+'점 차';
+      } }
     if(d.t==='end'){ Game.end('force'); const me=d.list.findIndex(p=>p.me===Bus.myId);
       $('#resRank').innerHTML=`<div class="disp" style="font-size:28px;color:var(--yellow)">${me>=0?(me+1)+'등!':''}</div>`+
         d.list.slice(0,5).map((p,i)=>`<div class="sub">${i+1}. ${p.name} — ${p.disp}</div>`).join(''); }
@@ -3829,12 +3870,32 @@ const Net = {
     return b.score-a.score; },
   ranked(){ return [...this.players.entries()].map(([id,p])=>({me:id,name:p.name,score:p.score,disp:this.disp(p),_p:p}))
     .sort((a,b)=>this.cmp(a._p,b._p)).map(({_p,...x})=>x); },
-  queueLb(){ if(this.lbTimer) return; this.lbTimer=setTimeout(()=>{ this.lbTimer=null; this.bcast({t:'lb',list:this.ranked()}); },900); },
+  queueLb(){ if(this.lbTimer) return; this.lbTimer=setTimeout(()=>{ this.lbTimer=null; this.pushLb(); },400); },
+  pushLb(){
+    const list=this.ranked();
+    const order=list.map(x=>x.me);
+    if(this.prevOrder){
+      list.forEach((x,i)=>{ const was=this.prevOrder.indexOf(x.me); const p=this.players.get(x.me);
+        if(!p||was<0) return; const d=was-i;
+        if(d!==0){ p.delta=d; p.deltaAt=Date.now(); }                 // 변동은 잠시 남겨 둔다
+        else if(p.deltaAt && Date.now()-p.deltaAt>5000){ p.delta=0; }
+      });
+      if(this.prevOrder[0]!==order[0] && order.length){
+        const lead=this.players.get(order[0]);
+        const old=this.players.get(this.prevOrder[0]);
+        if(lead) this.feed(`<b style="color:var(--grape)">👑 ${lead.name} 1위 등극!</b>${old?' ('+old.name+' 밀려남)':''}`);
+      }
+    }
+    this.prevOrder=order;
+    this.bcast({t:'lb',list});
+    this.renderTable();
+  },
   startBattle(){
     const duration=+$('#duration').value, rule=$('#rule').value, scope=$('#tScope').value,
           labels=tLabels, seed=Math.floor(Math.random()*1e9);
     this.rule=rule; this.finishCount=0;
-    this.players.forEach(p=>Object.assign(p,{score:0,lives:3,combo:0,last:'',ok:null,done:false,correct:0,elapsed:0,finished:false,rank:0,won:new Set(),miss:null,streak:0}));
+    this.players.forEach(p=>Object.assign(p,{score:0,lives:3,combo:0,last:'',ok:null,done:false,correct:0,elapsed:0,finished:false,rank:0,won:new Set(),miss:null,streak:0,delta:0}));
+    this.prevOrder=null; clearInterval(this.lbTick); this.lbTick=setInterval(()=>this.pushLb(),1500);
     this.session={active:true,msg:{seed,duration,rule,scope,labels}};
     this.mini=buildMini(scope); $('#qNow').classList.remove('on');
     const startMsg={t:'start',seed,duration,rule,scope,labels};
@@ -3854,7 +3915,7 @@ const Net = {
     this.renderTable();
   },
   endBattle(){
-    clearInterval(this.tTimer); clearTimeout(this.qTimer); this.qOpen=false; $('#tTimer').textContent='종료';
+    clearInterval(this.tTimer); clearInterval(this.lbTick); clearTimeout(this.qTimer); this.qOpen=false; $('#tTimer').textContent='종료';
     $('#qNow').classList.remove('on');
     if(this.session) this.session.active=false;
     const list=this.ranked(); this.bcast({t:'end',list}); setTimeout(()=>this.bcast({t:'end',list}),700);
@@ -3875,7 +3936,7 @@ const Net = {
         <div class="bar"><i style="width:${key(p)/max*100}%"></i></div></td>
       <td class="mapcell">${miniSVG(this.mini,cls)}</td>
       <td style="color:${p.ok===true?'var(--green)':p.ok===false?'var(--red)':'inherit'}">${p.last||'—'}</td>
-      <td>${p.combo?p.combo+'🔥':''}</td>
+      <td>${p.combo?p.combo+'🔥':''}${p.delta?`<span class="delta ${p.delta>0?'up':'down'}">${p.delta>0?'▲':'▼'}${Math.abs(p.delta)}</span>`:''}</td>
       <td class="n"><b>${this.disp(p)}</b></td></tr>`;}).join('');
   },
 };
@@ -3895,8 +3956,8 @@ document.querySelectorAll('#tSeg button').forEach(b=>b.onclick=()=>{ tLabels=b.d
 document.querySelectorAll('#soloSeg button').forEach(b=>b.onclick=()=>{ soloLabels=b.dataset.v;
   document.querySelectorAll('#soloSeg button').forEach(x=>x.classList.toggle('on',x===b)); });
 const RULE_DESC={buzz:'모두에게 같은 지명이 뜨고, 먼저 정답을 누른 사람만 점수를 가져가요. 빠를수록·연속으로 맞힐수록 점수가 커집니다.',
-  score:'각자 다른 순서로 풀고 제한 시간 안에 점수를 가장 많이 얻는 사람이 이겨요.',
-  survival:'시간 제한 없이 계속 떨어져요. 목숨 3개가 다 닳으면 탈락, 점수 순으로 순위를 매겨요.',
+  score:'제한 시간 안에 점수를 가장 많이 쌓는 사람이 이겨요. 놓쳐도 죽지 않고 −50점, 한 바퀴 다 돌면 +500점 보너스로 계속 갑니다.',
+  survival:'여기서만 목숨 3개예요. 놓치면 하나씩 줄고 다 닳으면 탈락합니다.',
   race:'범위를 한 바퀴 먼저 다 맞힌 사람이 이겨요. 완주 시간으로 순위를 매겨요.'};
 const syncRule=()=>{ $('#ruleDesc').textContent=RULE_DESC[$('#rule').value]; $('#durWrap').style.display=['score','buzz'].includes($('#rule').value)?'':'none'; };
 $('#rule').onchange=syncRule; syncRule();
