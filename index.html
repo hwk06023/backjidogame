@@ -3119,8 +3119,8 @@ var qrcode = function() {
   .bar{height:7px;background:#E7EBF1;border-radius:4px;overflow:hidden;margin-top:4px}
   .bar i{display:block;height:100%;background:var(--mint);transition:width .4s}
   .mini{width:96px;height:96px;display:block;background:#EAF4FF;border:2px solid var(--line);border-radius:10px}
-  .mini path{fill:#fff;stroke:#98A6BC;stroke-width:.7}
-  .mini path.won{fill:var(--mint)} .mini path.miss{fill:var(--coral)} .mini path.gone{fill:#CBD5E1}
+  .mini path,.mini use{fill:#fff;stroke:#98A6BC;stroke-width:.7}
+  .mini .won{fill:var(--mint)} .mini .miss{fill:var(--coral)} .mini .gone{fill:#CBD5E1}
   td.mapcell{width:104px}
   #qNow{display:none;flex-direction:column;gap:4px;align-items:center;background:var(--sun);
     border:3px solid var(--line);border-radius:20px;padding:12px;box-shadow:0 5px 0 var(--line)}
@@ -3353,10 +3353,24 @@ function buildMini(scope){
   const shapes=rings.map(g=>({id:g.id, d:g.rs.map(r=>'M'+r.map(([lo,la])=>px(lo)+' '+py(la)).join('L')+'Z').join('')}));
   return {vb:'0 0 100 100', shapes};
 }
-function miniSVG(mini,cls){   // cls: {unitId:'won'|'miss'|'gone'}
+/* 미니 지도의 경로 데이터는 문서에 딱 한 번만 넣고, 각 행은 <use> 로 참조한다.
+   예전에는 행마다 35KB짜리 path 데이터를 통째로 다시 그려서
+   (인원수 × 도착 메시지 수) 만큼 비용이 불어나 30명쯤에서 교사 화면이 멈췄다. */
+function installMini(mini){
+  if(!mini) return;
+  let host=document.getElementById('miniDefs');
+  if(!host){ host=document.createElement('div'); host.id='miniDefs';
+    host.setAttribute('aria-hidden','true');
+    host.style.cssText='position:absolute;width:0;height:0;overflow:hidden';
+    document.body.appendChild(host); }
+  host.innerHTML='<svg><defs>'+mini.shapes.map((s,i)=>
+    `<path id="mu${i}" d="${s.d}"></path>`).join('')+'</defs></svg>';
+  mini.idx={}; mini.shapes.forEach((s,i)=>{ mini.idx[s.id]=i; });
+}
+function miniSVG(mini){
   if(!mini) return '';
-  return `<svg class="mini" viewBox="${mini.vb}">`+mini.shapes.map(s=>
-    `<path d="${s.d}" class="${cls[s.id]||''}"></path>`).join('')+'</svg>';
+  return `<svg class="mini" viewBox="${mini.vb}">`+mini.shapes.map((s,i)=>
+    `<use href="#mu${i}" xlink:href="#mu${i}"></use>`).join('')+'</svg>';
 }
 
 /* ================= 유틸 ================= */
@@ -3648,6 +3662,10 @@ const Bus = {
   down(){ return 'kgeo/'+this.code+'/t'; },
   mine(){ return this.role==='teacher' ? this.up() : this.down(); },
   theirs(){ return this.role==='teacher' ? this.down() : this.up(); },
+  /* 학생 개인 토픽. ack/start 같은 1:1 메시지를 전체 토픽에 뿌리면
+     학생 수의 제곱만큼 배달이 일어나 브로커 제한에 먼저 걸린다. */
+  inbox(id){ return this.down()+'/'+(id||this.myId); },
+  topics(){ return this.role==='teacher' ? [this.up()] : [this.down(), this.inbox()]; },
   connect(role,code,onMsg,onState,onOpen){
     this.close(); this.role=role; this.code=code; this.onMsg=onMsg; this.onState=onState; this.onOpen=onOpen;
     this.idx=0; this.attempt();
@@ -3667,8 +3685,10 @@ const Bus = {
     c.on('close',()=>{ if(!settled) return fail(); if(this.live){ this.live=false; this.onState('drop','연결이 끊겼어요. 다시 연결 중…'); } });
     c.on('offline',()=>{ if(settled&&this.live){ this.live=false; this.onState('drop','연결이 끊겼어요. 다시 연결 중…'); } });
     c.on('connect',()=>{
-      settled=true; clearTimeout(to); c.options.reconnectPeriod=3000; this.live=true;
-      c.subscribe(this.mine(),{qos:0},err=>{
+      settled=true; clearTimeout(to);
+      c.options.reconnectPeriod=3000+Math.floor(Math.random()*4000);   // 동시 재접속 분산
+      this.live=true;
+      c.subscribe(this.topics(),{qos:0},err=>{
         if(err) return fail();
         this.onState('ok','연결됨 · '+b.n);
         if(this.onOpen) this.onOpen();
@@ -3679,6 +3699,7 @@ const Bus = {
     });
   },
   send(o){ if(this.client&&this.live){ try{ this.client.publish(this.theirs(),JSON.stringify(Object.assign({from:this.myId},o)),{qos:0}); }catch(e){} } },
+  sendTo(id,o){ if(this.client&&this.live){ try{ this.client.publish(this.inbox(id),JSON.stringify(Object.assign({from:this.myId,to:id},o)),{qos:0}); }catch(e){} } },
   close(){ this.live=false; if(this.client){ try{ this.client.options.reconnectPeriod=0; this.client.end(true); }catch(e){} this.client=null; } },
 };
 
@@ -3686,6 +3707,7 @@ const Bus = {
 const Net = {
   players:new Map(), code:'', rule:'score', finishCount:0, tTimer:null, tLeft:0, lbTimer:null, session:null, lastSeed:null,
   myName:'', myCode:'', ackTimer:null, hbTimer:null, watchTimer:null,
+  rows:new Map(), tRaf:null, tDirty:false, tLast:0,
 
   /* ---- 학생 ---- */
   join(code,name){
@@ -3703,9 +3725,14 @@ const Net = {
           setErr('그 코드의 방을 찾을 수 없어요. 선생님 화면의 코드를 다시 확인하세요.','var(--red)');
         }
       },9000);
-      clearInterval(this.hbTimer);
+      clearTimeout(this.hbTimer);
       const st=()=>$('#game').classList.contains('on')&&!Game.over ? 'play' : (Game.over&&Game.mode==='battle'?'done':'wait');
-      this.hbTimer=setInterval(()=>Bus.send({t:'hb',name,score:Game.score,lives:Game.lives,correct:Game.correct,st:st()}),3000);
+      /* 대기 중에는 시작 신호를 빨리 받아야 하니 촘촘히, 경기 중에는 드물게.
+         경기 중 점수는 score 메시지가 이미 나르므로 하트비트는 생존 신호면 충분하다. */
+      const beat=()=>{ const s=st();
+        Bus.send({t:'hb',name,score:Game.score,lives:Game.lives,correct:Game.correct,st:s});
+        this.hbTimer=setTimeout(beat, s==='wait'?2500:9000); };
+      this.hbTimer=setTimeout(beat,600);
     });
   },
   send(d){ Bus.send(d); },
@@ -3720,7 +3747,7 @@ const Net = {
     if(d.t==='q'){ Game.showQuestion(d); }
     if(d.t==='qres'){ Game.resolveQuestion(d); }
     if(d.t==='lb'){ $('#lb').innerHTML=d.list.slice(0,6).map((p,i)=>`<div class="${p.me===Bus.myId?'me':''}"><span>${i+1}. ${p.name}</span><b>${p.disp}</b></div>`).join('');
-      const idx=d.list.findIndex(p=>p.me===Bus.myId);
+      const idx=d.rk ? (d.rk[Bus.myId]||0)-1 : d.list.findIndex(p=>p.me===Bus.myId);
       if(idx>=0){
         const r=idx+1, prev=Game.myRank; Game.myRank=r;
         const el=$('#rankN'); el.textContent=r+'위'; $('#rankBox').style.display='';
@@ -3733,8 +3760,8 @@ const Net = {
             const lead=d.list[0]; Game.banner('추월당했다!', (lead?lead.name+' 에게 밀림':''));
           }
         }
-        const lead=d.list[0], me=d.list[idx];
-        if(lead && me && lead.me!==me.me) $('#rankBox').title='선두와 '+(lead.score-me.score)+'점 차';
+        const lead=d.list[0];
+        if(lead && lead.me!==Bus.myId) $('#rankBox').title='선두와 '+Math.max(0,(d.lead!=null?d.lead:lead.score)-Game.score)+'점 차';
       } }
     if(d.t==='end'){ Game.end('force'); const me=d.list.findIndex(p=>p.me===Bus.myId);
       $('#resRank').innerHTML=`<div class="disp" style="font-size:28px;color:var(--yellow)">${me>=0?(me+1)+'등!':''}</div>`+
@@ -3744,7 +3771,7 @@ const Net = {
   /* ---- 교사 ---- */
   host(){
     this.players.clear(); this.finishCount=0; this.code=randCode();
-    $('#roomCode').textContent=this.code; $('#tBody').innerHTML=''; $('#podium').style.display='none';
+    $('#roomCode').textContent=this.code; $('#tBody').innerHTML=''; this.rows.clear(); $('#podium').style.display='none';
     $('#btnStart').disabled=true; $('#btnEnd').disabled=true;
     this.showQR();
     Bus.connect('teacher',this.code,d=>this.onTeacher(d),(st,msg)=>{
@@ -3754,9 +3781,9 @@ const Net = {
     clearInterval(this.watchTimer);
     this.watchTimer=setInterval(()=>{
       const now=Date.now(); let changed=false;
-      this.players.forEach(p=>{ const off=now-p.seen>20000; if(off!==p.offline){ p.offline=off; changed=true; } });
+      this.players.forEach(p=>{ const off=now-p.seen>30000; if(off!==p.offline){ p.offline=off; changed=true; } });   // 하트비트 주기(최대 9초)의 3배
       if(changed){ this.renderTable(); this.broadcastPlayers(); }
-    },5000);
+    },6000);
   },
   onTeacher(m){
     const id=m.from;
@@ -3764,17 +3791,17 @@ const Net = {
       if(!this.players.has(id)) this.players.set(id,{name:m.name,score:0,lives:3,combo:0,last:'',ok:null,
         done:false,correct:0,elapsed:0,finished:false,rank:0,seen:Date.now(),offline:false,won:new Set(),miss:null,streak:0});
       const p=this.players.get(id); p.name=m.name; p.seen=Date.now(); p.offline=false;
-      Bus.send({t:'ack',to:id});
-      if(this.session && this.session.active) Bus.send(Object.assign({t:'start',to:id},this.session.msg));  // 진행 중이면 바로 합류
+      Bus.sendTo(id,{t:'ack'});
+      if(this.session && this.session.active) Bus.sendTo(id,Object.assign({t:'start'},this.session.msg));  // 진행 중이면 바로 합류
       this.broadcastPlayers(); this.renderTable(); return;
     }
     const p=this.players.get(id);
-    if(!p){ if(m.t==='hb'){ Bus.send({t:'ack',to:id}); } return; }
+    if(!p){ if(m.t==='hb'){ Bus.sendTo(id,{t:'ack'}); } return; }
     p.seen=Date.now(); p.offline=false;
     if(m.t==='hb'){
       if(!p.done){ p.score=m.score??p.score; p.lives=m.lives??p.lives; p.correct=m.correct??p.correct; }
       // 시작 신호를 못 받고 대기 중인 학생에게 다시 보내 준다
-      if(this.session && this.session.active && m.st==='wait') Bus.send(Object.assign({t:'start',to:id},this.session.msg));
+      if(this.session && this.session.active && m.st==='wait') Bus.sendTo(id,Object.assign({t:'start'},this.session.msg));
       this.renderTable(); }
     if(m.t==='buzz'){ this.onBuzz(id,p,m); return; }
     if(m.t==='score'){ if(m.uid){ if(m.ok) p.won.add(m.uid); else p.miss=m.uid; } Object.assign(p,{score:m.score,lives:m.lives,combo:m.combo,last:m.last,ok:m.ok,round:m.round,correct:m.correct,elapsed:m.elapsed}); this.renderTable(); this.queueLb(); }
@@ -3870,7 +3897,7 @@ const Net = {
     return b.score-a.score; },
   ranked(){ return [...this.players.entries()].map(([id,p])=>({me:id,name:p.name,score:p.score,disp:this.disp(p),_p:p}))
     .sort((a,b)=>this.cmp(a._p,b._p)).map(({_p,...x})=>x); },
-  queueLb(){ if(this.lbTimer) return; this.lbTimer=setTimeout(()=>{ this.lbTimer=null; this.pushLb(); },400); },
+  queueLb(){ if(this.lbTimer) return; this.lbTimer=setTimeout(()=>{ this.lbTimer=null; this.pushLb(); },1000); },
   pushLb(){
     const list=this.ranked();
     const order=list.map(x=>x.me);
@@ -3887,7 +3914,10 @@ const Net = {
       }
     }
     this.prevOrder=order;
-    this.bcast({t:'lb',list});
+    /* 전원 명단을 통째로 매번 뿌리면 트래픽이 인원수의 제곱으로 늘어난다.
+       화면에 실제로 필요한 상위권만 보내고, 개인 등수는 짧은 맵으로 대신한다. */
+    const rk={}; list.forEach((x,i)=>{ rk[x.me]=i+1; });
+    this.bcast({t:'lb',list:list.slice(0,8),rk,n:list.length,lead:list[0]?list[0].score:0});
     this.renderTable();
   },
   startBattle(){
@@ -3895,9 +3925,11 @@ const Net = {
           labels=tLabels, seed=Math.floor(Math.random()*1e9);
     this.rule=rule; this.finishCount=0;
     this.players.forEach(p=>Object.assign(p,{score:0,lives:3,combo:0,last:'',ok:null,done:false,correct:0,elapsed:0,finished:false,rank:0,won:new Set(),miss:null,streak:0,delta:0}));
-    this.prevOrder=null; clearInterval(this.lbTick); this.lbTick=setInterval(()=>this.pushLb(),1500);
+    this.prevOrder=null; clearInterval(this.lbTick); this.lbTick=setInterval(()=>this.pushLb(),2500);
     this.session={active:true,msg:{seed,duration,rule,scope,labels}};
-    this.mini=buildMini(scope); $('#qNow').classList.remove('on');
+    this.mini=buildMini(scope); installMini(this.mini);
+    $('#tBody').innerHTML=''; this.rows.clear();            // 미니 지도가 바뀌었으니 행을 다시 만든다
+    $('#qNow').classList.remove('on');
     const startMsg={t:'start',seed,duration,rule,scope,labels};
     this.bcast(startMsg);
     setTimeout(()=>this.bcast(startMsg),700);    // 유실 대비 한 번 더
@@ -3924,20 +3956,63 @@ const Net = {
     $('#podium').innerHTML=o.map(p=>p?`<div>${p.name}<small>${p.disp}</small></div>`:'<div style="visibility:hidden"></div>').join('');
     $('#podium').style.display='flex'; this.renderTable();
   },
+  /* 메시지가 올 때마다 표를 통째로 다시 그리면 (인원수 × 초당 메시지) 만큼
+     비용이 커진다. 여기서는 갱신 요청을 모아 두었다가 프레임당 한 번,
+     그것도 바뀐 칸만 손본다. */
   renderTable(){
+    this.tDirty=true;
+    if(this.tRaf) return;
+    const wait=Math.max(0,150-(Date.now()-this.tLast));
+    this.tRaf=setTimeout(()=>requestAnimationFrame(()=>{
+      this.tRaf=null; this.tLast=Date.now();
+      if(this.tDirty){ this.tDirty=false; try{ this.drawTable(); }catch(e){} }
+    }),wait);
+  },
+  rowFor(id){
+    let r=this.rows.get(id); if(r) return r;
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td><span class="nm"></span><span class="tag"></span><div class="bar"><i></i></div></td>'+
+      '<td class="mapcell">'+miniSVG(this.mini)+'</td><td class="lastc">—</td><td class="cmb"></td><td class="n"><b></b></td>';
+    r={tr, nm:tr.querySelector('.nm'), tag:tr.querySelector('.tag'), bar:tr.querySelector('.bar>i'),
+       lastc:tr.querySelector('.lastc'), cmb:tr.querySelector('.cmb'), sc:tr.querySelector('.n>b'),
+       uses:[].slice.call(tr.querySelectorAll('.mini>use')), mark:new Map(), c:{}};
+    this.rows.set(id,r); return r;
+  },
+  drawTable(){
     const key=p=>this.rule==='race'?(p.correct||0):p.score;
-    const max=Math.max(1,...[...this.players.values()].map(key));
-    const arr=[...this.players.values()].sort((a,b)=>this.cmp(a,b));
+    const arr=[...this.players.entries()].sort((a,b)=>this.cmp(a[1],b[1]));
+    const max=Math.max(1,...arr.map(([,p])=>key(p)));
+    const body=$('#tBody'), idx=(this.mini&&this.mini.idx)||{};
     $('#thScore').textContent=this.rule==='race'?'기록':'점수';
-    $('#tBody').innerHTML=arr.map((p,i)=>{
-      const cls={}; (p.won||new Set()).forEach(id=>cls[id]='won'); if(p.miss) cls[p.miss]='miss';
-      return `<tr class="${['top','second','third'][i]||''}">
-      <td>${p.name}${p.offline?' <small style="color:var(--red)">연결끊김</small>':p.rank?` <small style="color:var(--yellow)">${p.rank}위 완주</small>`:p.done?' <small style="opacity:.6">(종료)</small>':''}
-        <div class="bar"><i style="width:${key(p)/max*100}%"></i></div></td>
-      <td class="mapcell">${miniSVG(this.mini,cls)}</td>
-      <td style="color:${p.ok===true?'var(--green)':p.ok===false?'var(--red)':'inherit'}">${p.last||'—'}</td>
-      <td>${p.combo?p.combo+'🔥':''}${p.delta?`<span class="delta ${p.delta>0?'up':'down'}">${p.delta>0?'▲':'▼'}${Math.abs(p.delta)}</span>`:''}</td>
-      <td class="n"><b>${this.disp(p)}</b></td></tr>`;}).join('');
+    this.rows.forEach((r,id)=>{ if(!this.players.has(id)){ r.tr.remove(); this.rows.delete(id); } });
+    arr.forEach(([id,p],i)=>{
+      const r=this.rowFor(id), c=r.c;
+      const cls=['top','second','third'][i]||'';
+      if(c.cls!==cls){ r.tr.className=cls; c.cls=cls; }
+      if(c.name!==p.name){ r.nm.textContent=p.name; c.name=p.name; }
+      const tag=p.offline?' <small style="color:var(--red)">연결끊김</small>':p.rank?` <small style="color:var(--yellow)">${p.rank}위 완주</small>`:p.done?' <small style="opacity:.6">(종료)</small>':'';
+      if(c.tag!==tag){ r.tag.innerHTML=tag; c.tag=tag; }
+      const w=(key(p)/max*100).toFixed(1)+'%';
+      if(c.w!==w){ r.bar.style.width=w; c.w=w; }
+      const last=p.last||'—', col=p.ok===true?'var(--green)':p.ok===false?'var(--red)':'inherit';
+      if(c.last!==last){ r.lastc.textContent=last; c.last=last; }
+      if(c.col!==col){ r.lastc.style.color=col; c.col=col; }
+      const cmb=`${p.combo?p.combo+'🔥':''}${p.delta?`<span class="delta ${p.delta>0?'up':'down'}">${p.delta>0?'▲':'▼'}${Math.abs(p.delta)}</span>`:''}`;
+      if(c.cmb!==cmb){ r.cmb.innerHTML=cmb; c.cmb=cmb; }
+      const sc=this.disp(p);
+      if(c.sc!==sc){ r.sc.textContent=sc; c.sc=sc; }
+      // 미니 지도는 색이 바뀐 지역만 건드린다
+      if(r.uses.length){
+        const want=new Map(); (p.won||new Set()).forEach(u=>want.set(u,'won')); if(p.miss) want.set(p.miss,'miss');
+        want.forEach((v,u)=>{ if(r.mark.get(u)!==v){ const el=r.uses[idx[u]]; if(el) el.setAttribute('class',v); r.mark.set(u,v); } });
+        r.mark.forEach((v,u)=>{ if(!want.has(u)){ const el=r.uses[idx[u]]; if(el) el.setAttribute('class',''); r.mark.delete(u); } });
+      }
+    });
+    // 순위가 바뀐 행만 옮긴다
+    let prev=null;
+    arr.forEach(([id])=>{ const tr=this.rows.get(id).tr, at=prev?prev.nextSibling:body.firstChild;
+      if(tr!==at) body.insertBefore(tr,at);
+      prev=tr; });
   },
 };
 
@@ -3981,7 +4056,7 @@ const roomParam=(new URLSearchParams(location.search).get('room')||'').toUpperCa
 if(roomParam){ $('#joinCode').value=roomParam; show('#join'); setTimeout(()=>$('#joinName').focus(),200); }
 $('#btnStart').onclick=()=>Net.startBattle();
 $('#btnEnd').onclick=()=>Net.endBattle();
-document.querySelectorAll('.back').forEach(b=>b.onclick=()=>{ Snd.stop(); clearInterval(Net.hbTimer); clearInterval(Net.watchTimer); clearTimeout(Net.ackTimer); Bus.close(); show('#menu'); });
+document.querySelectorAll('.back').forEach(b=>b.onclick=()=>{ Snd.stop(); clearTimeout(Net.hbTimer); clearInterval(Net.watchTimer); clearTimeout(Net.ackTimer); Bus.close(); show('#menu'); });
 document.addEventListener('visibilitychange',()=>{ if(!Snd.ctx) return; document.hidden?Snd.ctx.suspend():Snd.ctx.resume(); });
 // 디버깅용 진입점 (콘솔에서 KGEO.Net 등으로 확인 가능)
 window.KGEO={Bus,Net,Game,Snd,drawScope,SCOPES,get UNITS(){return UNITS;}};
